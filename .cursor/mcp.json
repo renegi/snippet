@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "locofy": {
+      "args": [
+        "-y",
+        "@locofy/mcp@latest"
+      ],
+      "command": "npx",
+      "env": {
+        "PERSONAL_ACCESS_TOKEN": "lpat_v1_D4LUlIUtMt-r-SLw_WtSaUjWb6TDuIGG9NCBKM7ptkcIQoaW9Uw7N_pqiZEXXuZufa0Avu1ZmRg04ZEgHR-UOOu_IlopRfsug9K_KxZmxJFY9uQ-DfgnHpv0_NfncTh1WuXy50Y=",
+        "PROJECT_ID": "2zQvFLbVHQIqj2aLqRlUBT6vfxn",
+        "IDE_SOURCE": "cursor"
+      }
+    }
+  }
+} 
