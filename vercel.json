@@ -11,14 +11,6 @@
   ],
   "rewrites": [
     {
-      "source": "/static/(.*)",
-      "destination": "/podquote/client/build/static/$1"
-    },
-    {
-      "source": "/(.*\\.(js|css|ico|png|jpg|jpeg|gif|svg))",
-      "destination": "/podquote/client/build/$1"
-    },
-    {
       "source": "/(.*)",
       "destination": "/podquote/client/build/index.html"
     }
