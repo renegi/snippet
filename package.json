@@ -1,0 +1,17 @@
+{
+  "name": "podcast-quote-grabber",
+  "version": "1.0.0",
+  "description": "Copy and paste notes from any podcast",
+  "scripts": {
+    "build": "cd podquote/client && npm install && npm run build",
+    "start": "cd podquote/client && npm start",
+    "install-all": "cd podquote/client && npm install && cd ../../api && npm install"
+  },
+  "engines": {
+    "node": "18.x"
+  },
+  "dependencies": {
+    "@google-cloud/vision": "^4.0.0",
+    "axios": "^1.6.0"
+  }
+} 

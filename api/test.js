@@ -1,4 +1,4 @@
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   console.log(`🧪 Test API Called: ${req.method} /api/test`);
   
   // Add CORS headers
@@ -26,4 +26,4 @@ module.exports = async function handler(req, res) {
       hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY
     }
   });
-}; 
+} 

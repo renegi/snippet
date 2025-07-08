@@ -1,5 +1,10 @@
 {
   "version": 2,
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
   "builds": [
     {
       "src": "podquote/client/package.json",
@@ -9,11 +14,6 @@
       }
     }
   ],
-  "functions": {
-    "api/*.js": {
-      "runtime": "nodejs18.x"
-    }
-  },
   "routes": [
     {
       "src": "/api/(.*)",
@@ -24,7 +24,7 @@
       "dest": "/podquote/client/build/static/$1"
     },
     {
-      "src": "/(.*\\.(js|css|map|json))",
+      "src": "/(.*\\.(js|css|map|json|ico|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot))",
       "dest": "/podquote/client/build/$1"
     },
     {
@@ -50,5 +50,7 @@
         }
       ]
     }
-  ]
+  ],
+  "installCommand": "cd podquote/client && npm install && cd ../../api && npm install",
+  "buildCommand": "cd podquote/client && npm run build"
 } 
