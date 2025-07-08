@@ -33,7 +33,7 @@ npm run install-all
    - Copy `server/.env.example` to `server/.env`
    - Add your Google Cloud Vision API credentials
    - Add your AssemblyAI API key
-   - Add your OpenAI API key: `your_openai_api_key_here`
+   - Add your Anthropic API key: your_claude_api_key_here
 
 4. Start the development servers:
 ```bash
