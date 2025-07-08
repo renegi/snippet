@@ -1,12 +1,4 @@
 {
-  "name": "podquote-app",
-  "version": "1.0.0",
-  "description": "Podcast Quote Grabber - Extract quotes from podcast screenshots",
-  "scripts": {
-    "install": "cd podquote && npm run install-all",
-    "build": "cd podquote && npm run build",
-    "start": "cd podquote && npm start"
-  },
   "dependencies": {
     "@vercel/speed-insights": "^1.2.0"
   }
