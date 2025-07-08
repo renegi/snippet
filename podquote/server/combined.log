@@ -22792,3 +22792,4 @@
 {"confidence":0.98000807,"level":"info","message":"AssemblyAI transcript completed:","textLength":401,"timestamp":"2025-07-07T04:22:15.763Z","wordCount":72}
 {"level":"info","message":"Starting transcript correction with basic corrections only (Claude disabled)","timestamp":"2025-07-07T04:22:15.763Z"}
 {"confidence":0.8,"corrections":11,"improvements":{"grammar":0,"punctuation":4,"sentence_flow":0,"spelling":4,"terminology":0},"level":"info","message":"Transcript correction completed:","timestamp":"2025-07-07T04:22:15.764Z"}
+{"level":"info","message":"Server is running on port 3001","timestamp":"2025-07-08T00:20:46.948Z"}
