@@ -1,44 +1,21 @@
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
+const { ImageAnnotatorClient } = require('@google-cloud/vision');
 
-// Import your existing services
-const VisionService = require('../podquote/server/services/visionService');
-const logger = require('../podquote/server/utils/logger');
-
-// Configure multer for temporary file storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(os.tmpdir(), 'uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
+// Initialize Google Vision client
+let visionClient;
+try {
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    // Parse the JSON credentials from environment variable
+    const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+    visionClient = new ImageAnnotatorClient({
+      credentials: credentials,
+      projectId: credentials.project_id
+    });
   } else {
-    cb(new Error('Only image files are allowed!'), false);
+    visionClient = new ImageAnnotatorClient();
   }
-};
-
-const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
-  }
-});
-
-const visionService = new VisionService();
+} catch (error) {
+  console.error('Error initializing Vision client:', error);
+}
 
 module.exports = async function handler(req, res) {
   // Set CORS headers
@@ -60,55 +37,71 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // Handle file upload
-    await new Promise((resolve, reject) => {
-      upload.array('screenshots', 5)(req, res, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-
-    if (!req.files || req.files.length === 0) {
+    // Get the image data from the request body
+    const { image } = req.body;
+    
+    if (!image) {
       return res.status(400).json({
         success: false,
-        error: { message: 'No files uploaded' }
+        error: { message: 'No image data provided' }
       });
     }
 
-    const results = [];
-    for (const file of req.files) {
-      try {
-        const podcastInfo = await visionService.extractText(file.path);
-        results.push(podcastInfo);
-        
-        // Clean up temporary file
-        fs.unlinkSync(file.path);
-      } catch (error) {
-        logger.error('Error processing file:', error);
-        // Clean up temporary file even on error
-        if (fs.existsSync(file.path)) {
-          fs.unlinkSync(file.path);
-        }
-        throw error;
-      }
+    if (!visionClient) {
+      return res.status(500).json({
+        success: false,
+        error: { message: 'Vision service not properly configured' }
+      });
     }
+
+    // Convert base64 to buffer if needed
+    let imageBuffer;
+    if (typeof image === 'string' && image.startsWith('data:')) {
+      // Handle data URL
+      const base64Data = image.split(',')[1];
+      imageBuffer = Buffer.from(base64Data, 'base64');
+    } else if (typeof image === 'string') {
+      // Handle plain base64
+      imageBuffer = Buffer.from(image, 'base64');
+    } else {
+      imageBuffer = Buffer.from(image);
+    }
+
+    // Perform text detection
+    const [result] = await visionClient.textDetection({
+      image: { content: imageBuffer }
+    });
+
+    const detections = result.textAnnotations;
+    
+    if (!detections || detections.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          podcast: null,
+          episode: null,
+          timestamp: null,
+          text: ''
+        }
+      });
+    }
+
+    const text = detections[0].description;
+    
+    // Extract podcast information using regex patterns
+    const podcastInfo = extractPodcastInfo(text);
 
     res.json({
       success: true,
-      data: results
+      data: {
+        ...podcastInfo,
+        text: text
+      }
     });
-  } catch (error) {
-    logger.error('Error processing screenshots:', error);
-    
-    // Clean up any remaining files
-    if (req.files) {
-      req.files.forEach(file => {
-        if (fs.existsSync(file.path)) {
-          fs.unlinkSync(file.path);
-        }
-      });
-    }
 
+  } catch (error) {
+    console.error('Error processing image:', error);
+    
     res.status(500).json({
       success: false,
       error: {
@@ -118,4 +111,69 @@ module.exports = async function handler(req, res) {
       }
     });
   }
-}; 
+};
+
+function extractPodcastInfo(text) {
+  // Initialize result object
+  const result = {
+    podcast: null,
+    episode: null,
+    timestamp: null
+  };
+
+  // Common podcast app patterns
+  const patterns = {
+    // Spotify patterns
+    spotify: {
+      podcast: /^([^•]+)(?:•.*)?$/m,
+      episode: /•\s*(.+?)(?:\s*•|\s*$)/,
+      timestamp: /(\d{1,2}:\d{2}(?::\d{2})?)/
+    },
+    // Apple Podcasts patterns
+    apple: {
+      podcast: /^(.+?)\s*(?:\n|\r|$)/,
+      episode: /(?:Episode|Ep\.?)\s*:?\s*(.+?)(?:\n|\r|$)/i,
+      timestamp: /(\d{1,2}:\d{2}(?::\d{2})?)/
+    },
+    // Generic patterns
+    generic: {
+      podcast: /^(.+?)(?:\s*[-–—]\s*(.+?))?$/m,
+      episode: /(?:Episode|Ep\.?|Part)\s*:?\s*(.+?)(?:\n|\r|$)/i,
+      timestamp: /(\d{1,2}:\d{2}(?::\d{2})?)/
+    }
+  };
+
+  // Try different patterns
+  for (const [platform, platformPatterns] of Object.entries(patterns)) {
+    if (!result.podcast) {
+      const podcastMatch = text.match(platformPatterns.podcast);
+      if (podcastMatch) {
+        result.podcast = podcastMatch[1].trim();
+      }
+    }
+
+    if (!result.episode) {
+      const episodeMatch = text.match(platformPatterns.episode);
+      if (episodeMatch) {
+        result.episode = episodeMatch[1].trim();
+      }
+    }
+
+    if (!result.timestamp) {
+      const timestampMatch = text.match(platformPatterns.timestamp);
+      if (timestampMatch) {
+        result.timestamp = timestampMatch[1];
+      }
+    }
+  }
+
+  // Fallback: use first line as podcast name if nothing found
+  if (!result.podcast) {
+    const lines = text.split(/\n|\r/).filter(line => line.trim());
+    if (lines.length > 0) {
+      result.podcast = lines[0].trim();
+    }
+  }
+
+  return result;
+} 
