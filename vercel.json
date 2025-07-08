@@ -9,18 +9,18 @@
       }
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/static/(.*)",
-      "dest": "/podquote/client/build/static/$1"
+      "source": "/static/(.*)",
+      "destination": "/podquote/client/build/static/$1"
     },
     {
-      "src": "/(.*\\.(js|css|ico|png|jpg|jpeg|gif|svg))",
-      "dest": "/podquote/client/build/$1"
+      "source": "/(.*\\.(js|css|ico|png|jpg|jpeg|gif|svg))",
+      "destination": "/podquote/client/build/$1"
     },
     {
-      "src": "/(.*)",
-      "dest": "/podquote/client/build/index.html"
+      "source": "/(.*)",
+      "destination": "/podquote/client/build/index.html"
     }
   ],
   "headers": [
