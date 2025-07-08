@@ -4,15 +4,7 @@
       "runtime": "nodejs18.x"
     }
   },
-  "builds": [
-    {
-      "src": "podquote/client/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "build"
-      }
-    }
-  ],
-  "installCommand": "cd podquote/client && npm install && cd ../../api && npm install",
-  "buildCommand": "cd podquote/client && npm run build"
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" }
+  ]
 } 
