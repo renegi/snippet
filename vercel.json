@@ -16,10 +16,6 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
-    },
-    {
       "src": "/static/(.*)",
       "dest": "/podquote/client/build/static/$1"
     },
@@ -30,25 +26,6 @@
     {
       "src": "/(.*)",
       "dest": "/podquote/client/build/index.html"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization"
-        }
-      ]
     }
   ],
   "installCommand": "cd podquote/client && npm install && cd ../../api && npm install",
