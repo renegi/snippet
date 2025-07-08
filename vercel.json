@@ -14,10 +14,22 @@
       "runtime": "nodejs18.x"
     }
   },
-  "rewrites": [
+  "routes": [
     {
-      "source": "/(.*)",
-      "destination": "/podquote/client/build/index.html"
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "/static/(.*)",
+      "dest": "/podquote/client/build/static/$1"
+    },
+    {
+      "src": "/(.*\\.(js|css|map|json))",
+      "dest": "/podquote/client/build/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/podquote/client/build/index.html"
     }
   ],
   "headers": [
