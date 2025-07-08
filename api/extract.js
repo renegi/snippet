@@ -1,4 +1,4 @@
-import { ImageAnnotatorClient } from '@google-cloud/vision';
+const { ImageAnnotatorClient } = require('@google-cloud/vision');
 
 // Initialize Google Vision client
 let visionClient;
@@ -19,7 +19,7 @@ try {
   console.error('❌ Error initializing Vision client:', error);
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   console.log(`🔥 API Called: ${req.method} /api/extract`);
   
   // Add CORS headers
