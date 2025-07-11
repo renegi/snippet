@@ -15,13 +15,22 @@ const port = process.env.PORT || 3001;
 const buildPath = path.join(__dirname, '../client/build');
 const indexPath = path.join(buildPath, 'index.html');
 
+// Create uploads directory if it doesn't exist
+const uploadsPath = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+  console.log('Created uploads directory:', uploadsPath);
+}
+
 console.log('=== DEBUG INFO ===');
 console.log('Current working directory:', process.cwd());
 console.log('__dirname:', __dirname);
 console.log('Build path:', buildPath);
 console.log('Index path:', indexPath);
+console.log('Uploads path:', uploadsPath);
 console.log('Build directory exists:', fs.existsSync(buildPath));
 console.log('Index.html exists:', fs.existsSync(indexPath));
+console.log('Uploads directory exists:', fs.existsSync(uploadsPath));
 
 if (fs.existsSync(buildPath)) {
   console.log('Contents of build directory:', fs.readdirSync(buildPath));
