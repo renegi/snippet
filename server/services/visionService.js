@@ -4,7 +4,36 @@ const applePodcastsService = require('./applePodcastsService');
 
 class VisionService {
   constructor() {
-    this.client = new vision.ImageAnnotatorClient();
+    // Handle different authentication methods for different environments
+    let clientConfig = {};
+    
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64) {
+      // For Render: decode base64 credentials
+      const credentials = JSON.parse(
+        Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64, 'base64').toString()
+      );
+      clientConfig = {
+        credentials: credentials,
+        projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || credentials.project_id
+      };
+    } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      // For local development: use file path
+      clientConfig = {
+        keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        projectId: process.env.GOOGLE_CLOUD_PROJECT_ID
+      };
+    } else if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+      // Alternative: individual credential fields
+      clientConfig = {
+        credentials: {
+          client_email: process.env.GOOGLE_CLIENT_EMAIL,
+          private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+        },
+        projectId: process.env.GOOGLE_CLOUD_PROJECT_ID
+      };
+    }
+    
+    this.client = new vision.ImageAnnotatorClient(clientConfig);
   }
 
   async extractText(imagePath) {
