@@ -23,14 +23,15 @@ const MainContent = ({
     return [-120, -90, -60, -45, -30, -15, 0, 15, 30, 45, 60, 90, 120];
   };
 
-  // Convert time to position (0-300px timeline width)
+  // Convert time to position (responsive timeline width)
   const timeToPosition = (time) => {
     const notchPositions = getNotchPositions();
-    const timelineWidth = 300;
+    // Get actual timeline width from the container, default to 300px
+    const timelineWidth = timelineRef.current ? timelineRef.current.clientWidth - 60 : 300; // Account for 30px padding on each side
     
     // Find the position based on notch spacing
-    // Each notch is equally spaced across 300px
-    const pixelsPerNotch = timelineWidth / (notchPositions.length - 1); // 25px per notch interval
+    // Each notch is equally spaced across the timeline width
+    const pixelsPerNotch = timelineWidth / (notchPositions.length - 1);
     
     // Find where this time falls between notches
     for (let i = 0; i < notchPositions.length - 1; i++) {
@@ -54,7 +55,8 @@ const MainContent = ({
   // Convert position to time
   const positionToTime = (position) => {
     const notchPositions = getNotchPositions();
-    const timelineWidth = 300;
+    // Get actual timeline width from the container, default to 300px
+    const timelineWidth = timelineRef.current ? timelineRef.current.clientWidth - 60 : 300; // Account for 30px padding on each side
     const pixelsPerNotch = timelineWidth / (notchPositions.length - 1);
     
     // Find which notch interval this position falls in
@@ -353,7 +355,7 @@ const MainContent = ({
               className="self-stretch rounded-3xl bg-[#e8e4d9] border-[#dddad1] border-solid border-[2px] flex flex-row items-center justify-center py-0 px-[30px] relative gap-0 min-h-[73px]"
             >
               {/* Timeline markers - 13 equally spaced markers */}
-              <div className="w-[300px] relative h-[73px]">
+              <div className="w-full relative h-[73px]">
                 {getNotchPositions().map((time, i) => (
                   <div
                     key={i}
