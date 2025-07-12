@@ -46,7 +46,20 @@ class VisionService {
 
   async extractText(imagePath) {
     try {
-      const [result] = await this.client.textDetection(imagePath);
+      logger.info('📱 Mobile Debug: Starting Vision API text detection', {
+        imagePath,
+        fileExists: require('fs').existsSync(imagePath)
+      });
+      
+      // Add timeout for large mobile images
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Vision API timeout - image too large or processing taking too long')), 30000)
+      );
+      
+      const visionCall = this.client.textDetection(imagePath);
+      const [result] = await Promise.race([visionCall, timeout]);
+      
+      logger.info('📱 Mobile Debug: Vision API call completed successfully');
       const detections = result.textAnnotations;
       
       if (!detections || detections.length === 0) {
@@ -137,8 +150,23 @@ class VisionService {
       
       return podcastInfo;
     } catch (error) {
-      logger.error('Error in Vision API:', error);
-      throw error;
+      logger.error('📱 Mobile Debug: Error in Vision API:', {
+        error: error.message,
+        code: error.code,
+        stack: error.stack,
+        imagePath
+      });
+      
+      // Provide more specific error messages
+      if (error.message.includes('timeout')) {
+        throw new Error('Image processing timed out - try a smaller image or crop the screenshot');
+      } else if (error.message.includes('QUOTA_EXCEEDED')) {
+        throw new Error('Google Vision API quota exceeded - please try again later');
+      } else if (error.message.includes('INVALID_IMAGE')) {
+        throw new Error('Invalid image format - please use PNG, JPG, or WebP');
+      } else {
+        throw new Error(`Vision API error: ${error.message}`);
+      }
     }
   }
 

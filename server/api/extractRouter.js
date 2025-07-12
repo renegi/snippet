@@ -39,6 +39,12 @@ router.post('/', upload.array('screenshots', 5), async (req, res, next) => {
       
       const startTime = Date.now();
       try {
+        // Check file size and add warning for large mobile images
+        const fileSizeMB = file.size / 1024 / 1024;
+        if (fileSizeMB > 5) {
+          logger.warn(`📱 Mobile Debug: Large file detected (${fileSizeMB.toFixed(2)}MB) - ${file.originalname}`);
+        }
+        
         const podcastInfo = await visionService.extractText(file.path);
         const endTime = Date.now();
         
