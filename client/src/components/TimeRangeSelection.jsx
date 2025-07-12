@@ -134,6 +134,11 @@ const TimeRangeSelection = ({
     setCurrentEpisodeIndex(newIndex);
   };
 
+  // Scroll to top when component mounts or when switching screens
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [showTranscript]);
+
   if (showTranscript && episodes.length > 0) {
     return (
       <div className="w-full max-w-[393px] mx-auto">

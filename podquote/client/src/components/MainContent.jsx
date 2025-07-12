@@ -327,7 +327,9 @@ const MainContent = ({
       </div>
       
       {/* Floating footer with background */}
-      <div className="absolute bottom-0 left-0 right-0 bg-[#f6f3ee] border-[#dddad1] border-solid border-t-[1px] overflow-hidden flex flex-col items-center justify-start pt-3 px-4 pb-4 gap-6">
+      <div className="absolute bottom-0 left-0 right-0 bg-[#f6f3ee] overflow-hidden flex flex-col items-center justify-start pt-3 px-4 pb-4 gap-6">
+        {/* Edge-to-edge divider line */}
+        <div className="absolute top-0 left-0 right-0 h-px bg-[#dddad1]"></div>
         <div className="w-[361px] flex flex-col items-start justify-start gap-4">
           <div className="self-stretch flex flex-col items-start justify-start gap-[5px]">
             <div className="w-[361px] flex flex-row items-center justify-between gap-0">

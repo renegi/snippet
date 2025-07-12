@@ -447,7 +447,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           {/* Process Button or Loading Bar */}
           <div className="flex justify-center min-h-[56px]">
             {isProcessing ? (
-              <div className="w-[361px]">
+              <div className="w-full max-w-[361px]">
                 <div className="w-full bg-gray-200 rounded-full h-4">
                   <div className="bg-indigo-600 h-4 rounded-full animate-pulse" style={{ width: '80%' }}></div>
                 </div>

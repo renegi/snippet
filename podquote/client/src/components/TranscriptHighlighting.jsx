@@ -1207,7 +1207,9 @@ const TranscriptHighlighting = ({
     <div className={`w-[393px] bg-[#f6f3ee] max-w-full h-[678px] overflow-hidden shrink-0 flex flex-col items-center justify-start box-border gap-0 text-left text-sm text-[#1b1b1b] font-['Termina'] relative ${className}`}>
       
       {/* Header with episode info */}
-      <div className="w-full bg-[#FAF9F7] border-[#dddad1] border-solid border-b-[1px] flex flex-row items-center justify-between pt-2 px-4 pb-4 relative shrink-0">
+      <div className="w-full bg-[#f6f3ee] flex flex-row items-center justify-between pt-2 px-4 pb-4 relative shrink-0">
+        {/* Edge-to-edge divider line */}
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-[#dddad1]"></div>
         {/* Episode navigation - left arrow */}
         {episodes.length > 1 && prevEpisode ? (
           <button
@@ -1327,7 +1329,9 @@ const TranscriptHighlighting = ({
       </div>
 
       {/* Bottom action buttons */}
-      <div className="self-stretch bg-stone-100 border-[#dddad1] border-solid border-t-[1px] overflow-hidden flex flex-row items-center justify-start pt-4 px-4 pb-6 gap-4 shrink-0">
+      <div className="self-stretch bg-[#f6f3ee] overflow-hidden flex flex-row items-center justify-start pt-4 px-4 pb-6 gap-4 shrink-0 relative">
+        {/* Edge-to-edge divider line */}
+        <div className="absolute top-0 left-0 right-0 h-px bg-[#dddad1]"></div>
         <button
           onClick={onDone}
           className="h-16 rounded-[24px] bg-[#dddad1] transition-colors overflow-hidden flex flex-row items-center justify-center py-[18px] px-6 box-border text-left text-base text-[#1b1b1b] font-['Termina']"
