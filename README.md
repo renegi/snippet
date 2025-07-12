@@ -122,4 +122,4 @@ Get transcript for a specific time range.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details. # Last updated: Fri Jul 11 22:47:52 PDT 2025
