@@ -354,7 +354,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   // Show new UI when requested (even without files initially)
   if (showNewUI) {
     return (
-      <div className="w-[393px] mx-auto">
+      <div className="w-full max-w-[393px] mx-auto px-4">
         <TimeRangeSelection
           screenshots={screenshots}
           onAddScreenshots={handleAddScreenshots}

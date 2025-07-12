@@ -240,10 +240,10 @@ const MainContent = ({
 
   return (
     <div
-      className={`w-[393px] bg-[#f6f3ee] max-w-full h-[678px] overflow-hidden shrink-0 flex flex-col items-center justify-start pt-4 px-0 pb-0 box-border gap-0 text-left text-2xl text-[#1b1b1b] font-['Termina'] relative ${className}`}
+      className={`w-full max-w-[393px] bg-[#f6f3ee] h-[678px] overflow-hidden shrink-0 flex flex-col items-center justify-start pt-4 px-0 pb-0 box-border gap-0 text-left text-2xl text-[#1b1b1b] font-['Termina'] relative ${className}`}
     >
       {/* Fixed header with title and add button */}
-      <div className="w-[361px] flex flex-row items-center justify-between gap-0 mb-6">
+      <div className="w-full max-w-[361px] px-4 flex flex-row items-center justify-between gap-0 mb-6">
         <b className="relative leading-[130%]">
           {screenshots.length} screenshot{screenshots.length === 1 ? '' : 's'}
         </b>
@@ -261,8 +261,8 @@ const MainContent = ({
       </div>
 
       {/* Scrollable list area */}
-      <div className="w-[361px] flex-1 flex flex-col items-start justify-start overflow-y-auto pb-[240px]">
-        <div className="w-[361px] flex flex-col items-start justify-start gap-4 text-sm">
+      <div className="w-full max-w-[361px] px-4 flex-1 flex flex-col items-start justify-start overflow-y-auto pb-[240px]">
+        <div className="w-full flex flex-col items-start justify-start gap-4 text-sm">
           {screenshots.map((screenshot, index) => {
             // Use the shouldShowGhostLoading flag from the screenshot object
             // Only fall back to checking episode title if we don't have proper podcast info
@@ -326,9 +326,9 @@ const MainContent = ({
       
       {/* Floating footer with background */}
       <div className="absolute bottom-0 left-0 right-0 bg-[#f6f3ee] border-[#dddad1] border-solid border-t-[1px] overflow-hidden flex flex-col items-center justify-start pt-3 px-4 pb-4 gap-6">
-        <div className="w-[361px] flex flex-col items-start justify-start gap-4">
-          <div className="self-stretch flex flex-col items-start justify-start gap-[5px]">
-            <div className="w-[361px] flex flex-row items-center justify-between gap-0">
+        <div className="w-full max-w-[361px] flex flex-col items-start justify-start gap-4">
+                      <div className="self-stretch flex flex-col items-start justify-start gap-[5px]">
+              <div className="w-full flex flex-row items-center justify-between gap-0">
               <button
                 onClick={() => adjustTime(-15, 'left')}
                 className="w-[85px] relative h-[31px] text-left hover:bg-gray-100 rounded-lg p-2 transition-colors"
@@ -395,7 +395,7 @@ const MainContent = ({
               </div>
             </div>
           </div>
-          <b className="w-[361px] relative text-base leading-[125%] inline-block text-center">
+          <b className="w-full relative text-base leading-[125%] inline-block text-center">
             {totalSelected} seconds selected
           </b>
         </div>

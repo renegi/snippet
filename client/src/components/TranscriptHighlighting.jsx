@@ -1204,7 +1204,7 @@ const TranscriptHighlighting = ({
   }, [isPendingSelection, touchStartPosition, isSelecting]);
 
   return (
-    <div className={`w-[393px] bg-[#f6f3ee] max-w-full h-[678px] overflow-hidden shrink-0 flex flex-col items-center justify-start box-border gap-0 text-left text-sm text-[#1b1b1b] font-['Termina'] relative ${className}`}>
+    <div className={`w-full max-w-[393px] bg-[#f6f3ee] h-[678px] overflow-hidden shrink-0 flex flex-col items-center justify-start box-border gap-0 text-left text-sm text-[#1b1b1b] font-['Termina'] relative ${className}`}>
       
       {/* Header with episode info */}
       <div className="w-full bg-[#FAF9F7] border-[#dddad1] border-solid border-b-[1px] flex flex-row items-center justify-between pt-2 px-4 pb-4 relative shrink-0">
