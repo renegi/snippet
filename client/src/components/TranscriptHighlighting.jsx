@@ -831,7 +831,7 @@ const TranscriptHighlighting = ({
           className={`cursor-pointer transition-all duration-150 rounded-sm px-1 py-0.5 -mx-1 -my-0.5 min-h-[1.5rem] inline-flex items-center ${
             isSelected 
               ? 'bg-blue-200' 
-              : 'hover:bg-gray-100'
+              : ''
           }`}
           style={{
             // Allow touch actions for scrolling, but prevent text selection
