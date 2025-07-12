@@ -3,7 +3,10 @@ const logger = require('../utils/logger');
 
 class AssemblyService {
   constructor() {
-    this.apiKey = process.env.ASSEMBLY_API_KEY;
+    this.apiKey = process.env.ASSEMBLYAI_API_KEY;
+    if (!this.apiKey) {
+      throw new Error('ASSEMBLYAI_API_KEY environment variable is required');
+    }
     this.baseUrl = 'https://api.assemblyai.com/v2';
     this.client = axios.create({
       baseURL: this.baseUrl,
