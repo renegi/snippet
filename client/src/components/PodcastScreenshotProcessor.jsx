@@ -86,19 +86,66 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
 
   const processFiles = async (filesToProcess) => {
     setIsProcessing(true);
+    
+    console.log('📱 Mobile Debug: Starting file processing', {
+      fileCount: filesToProcess.length,
+      totalSize: filesToProcess.reduce((sum, file) => sum + file.size, 0),
+      files: filesToProcess.map(f => ({ 
+        name: f.name, 
+        size: f.size, 
+        type: f.type,
+        sizeInMB: (f.size / 1024 / 1024).toFixed(2) + 'MB'
+      })),
+      isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    });
+    
     try {
       const formData = new FormData();
-      filesToProcess.forEach(file => formData.append('screenshots', file));
+      filesToProcess.forEach((file, index) => {
+        console.log(`📱 Mobile Debug: Adding file ${index + 1} to FormData:`, {
+          name: file.name,
+          size: file.size,
+          type: file.type
+        });
+        formData.append('screenshots', file);
+      });
       formData.append('timeRange', JSON.stringify(timeRange));
 
+      console.log('📱 Mobile Debug: Sending request to server...');
+      const startTime = Date.now();
+      
       const result = await processScreenshots(formData);
+      
+      const endTime = Date.now();
+      console.log('📱 Mobile Debug: Server response received', {
+        processingTime: `${endTime - startTime}ms`,
+        success: result.success,
+        dataLength: result.data?.length || 0,
+        hasError: !!result.error
+      });
+      
+      if (result.success && result.data) {
+        console.log('📱 Mobile Debug: Processing results:', result.data.map((item, index) => ({
+          index,
+          podcastTitle: item.firstPass?.podcastTitle || item.secondPass?.podcastTitle,
+          episodeTitle: item.firstPass?.episodeTitle || item.secondPass?.episodeTitle,
+          timestamp: item.firstPass?.timestamp || item.secondPass?.timestamp,
+          validated: item.validation?.validated,
+          player: item.firstPass?.player || item.secondPass?.player
+        })));
+      }
+      
       setPodcastInfo(result);
       // Update the count of processed episodes
       setProcessedEpisodeCount(result?.data?.length || 0);
       // Clear previous transcripts when processing new screenshots
       setTranscripts({});
     } catch (error) {
-      console.error('Error processing screenshots:', error);
+      console.error('📱 Mobile Debug: Error processing screenshots:', {
+        error: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       // TODO: Add error handling UI
     } finally {
       setIsProcessing(false);
@@ -324,26 +371,6 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           onChange={handleFileChange}
           ref={fileInputRef}
         />
-        
-        {/* Mobile fallback file input - visible on mobile if needed */}
-        {/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && (
-          <div className="mt-4 text-center">
-            <label 
-              htmlFor="mobile-file-input" 
-              className="inline-block bg-blue-600 text-white px-4 py-2 rounded-md cursor-pointer hover:bg-blue-700 transition-colors"
-            >
-              📱 Select Images (Mobile)
-            </label>
-            <input
-              id="mobile-file-input"
-              type="file"
-              multiple
-              accept="image/*,image/jpeg,image/jpg,image/png,image/heic,image/heif"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-          </div>
-        )}
         
         {/* Toggle back to old UI - centered */}
         <div className="flex justify-center mt-6">

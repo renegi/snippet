@@ -12,9 +12,19 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
+  console.log('📱 Mobile Debug: File filter check', {
+    originalname: file.originalname,
+    mimetype: file.mimetype,
+    size: file.size,
+    userAgent: req.headers['user-agent'],
+    isMobile: /iPhone|iPad|iPod|Android/i.test(req.headers['user-agent'] || '')
+  });
+  
   if (file.mimetype.startsWith('image/')) {
+    console.log('📱 Mobile Debug: File accepted');
     cb(null, true);
   } else {
+    console.log('📱 Mobile Debug: File rejected - not an image');
     cb(new Error('Only image files are allowed!'), false);
   }
 };
