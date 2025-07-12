@@ -37,7 +37,19 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   }, [initialFiles]);
 
   const handleFileChange = (event) => {
-    const selectedFiles = Array.from(event.target.files);
+    console.log('📱 Mobile Debug: File input changed', {
+      filesCount: event.target.files?.length || 0,
+      isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    });
+    
+    const selectedFiles = Array.from(event.target.files || []);
+    
+    if (selectedFiles.length === 0) {
+      console.log('📱 Mobile Debug: No files selected');
+      return;
+    }
+    
+    console.log('📱 Mobile Debug: Selected files:', selectedFiles.map(f => ({ name: f.name, size: f.size, type: f.type })));
     
     // Track the number of episodes that were already processed before adding new ones
     const previousEpisodeCount = files.length;
@@ -47,7 +59,15 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     setFiles(updatedFiles);
     
     // Create preview URLs for new files and append to existing previews
-    const newPreviews = selectedFiles.map(file => URL.createObjectURL(file));
+    const newPreviews = selectedFiles.map(file => {
+      try {
+        return URL.createObjectURL(file);
+      } catch (error) {
+        console.error('📱 Mobile Debug: Error creating preview URL:', error);
+        return null;
+      }
+    }).filter(Boolean);
+    
     const updatedPreviews = [...previews, ...newPreviews];
     setPreviews(updatedPreviews);
     
@@ -56,6 +76,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     
     // Automatically process all files (existing + new) after selection
     if (selectedFiles.length > 0) {
+      console.log('📱 Mobile Debug: Processing files...');
       processFiles(updatedFiles);
     }
     
@@ -85,8 +106,17 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   };
 
   const handleAddScreenshots = () => {
+    console.log('📱 Mobile Debug: Add screenshots button clicked');
+    
     if (fileInputRef.current) {
-      fileInputRef.current.click();
+      console.log('📱 Mobile Debug: Triggering file input click');
+      
+      // Add a small delay for mobile browsers
+      setTimeout(() => {
+        fileInputRef.current.click();
+      }, 100);
+    } else {
+      console.error('📱 Mobile Debug: File input ref not found');
     }
   };
 
@@ -289,11 +319,31 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
         <input
           type="file"
           multiple
-          accept="image/*"
+          accept="image/*,image/jpeg,image/jpg,image/png,image/heic,image/heif"
           className="hidden"
           onChange={handleFileChange}
           ref={fileInputRef}
         />
+        
+        {/* Mobile fallback file input - visible on mobile if needed */}
+        {/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && (
+          <div className="mt-4 text-center">
+            <label 
+              htmlFor="mobile-file-input" 
+              className="inline-block bg-blue-600 text-white px-4 py-2 rounded-md cursor-pointer hover:bg-blue-700 transition-colors"
+            >
+              📱 Select Images (Mobile)
+            </label>
+            <input
+              id="mobile-file-input"
+              type="file"
+              multiple
+              accept="image/*,image/jpeg,image/jpg,image/png,image/heic,image/heif"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+          </div>
+        )}
         
         {/* Toggle back to old UI - centered */}
         <div className="flex justify-center mt-6">
@@ -334,7 +384,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
                   id="file-upload"
                   type="file"
                   multiple
-                  accept="image/*"
+                  accept="image/*,image/jpeg,image/jpg,image/png,image/heic,image/heif"
                   className="hidden"
                   onChange={handleFileChange}
                   ref={fileInputRef}
