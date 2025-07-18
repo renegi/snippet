@@ -21,12 +21,11 @@ function PodcastScreenshotProcessor({ setCurrentScreen }) {
         formData.append('screenshots', file);
       });
 
-      const response = await fetch('/api/extract/text', {
+      await fetch('/api/extract/text', {
         method: 'POST',
         body: formData
       });
 
-      const data = await response.json();
       setCurrentScreen('highlighting');
     } catch (error) {
       console.error('Error processing screenshots:', error);
