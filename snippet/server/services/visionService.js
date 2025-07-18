@@ -321,9 +321,18 @@ class VisionService {
       bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
       logger.info(`Fallback detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
     }
+    
+    // NEW: If still no candidates, try a broader area that includes the upper-middle section
+    // This helps capture episode titles like "Made in America" that appear above the cover art
+    if (bottomLines.length < 2) {
+      bottomThreshold = maxY * (1 / 8); // Start at 12.5% (include upper area)
+      topThreshold = maxY * (9 / 10); // End at 90% (exclude bottom 10%)
+      bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
+      logger.info(`Broad fallback detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
+    }
 
     // Filter for podcast/episode title candidates:
-    // 1. Must have multiple words (at least 2)
+    // 1. Must have multiple words (at least 2, or 1 in fallback mode)
     // 2. Must be reasonable length (3-50 chars)
     // 3. Must not be UI elements, dates, or times
     const titleCandidates = bottomLines.filter(line => {
@@ -336,8 +345,10 @@ class VisionService {
       logger.info(`Considering line: "${line.text}" (Y=${line.avgY}, wordCount=${line.wordCount}, length=${description.length})`);
       
       // Must have multiple words (more lenient in fallback mode)
-      if (line.wordCount < 2) {
-        logger.info(`  → FILTERED: Too few words (${line.wordCount})`);
+      // Allow single words in fallback mode for podcast names like "PLANET MONEY"
+      const minWords = isFallbackArea ? 1 : 2;
+      if (line.wordCount < minWords) {
+        logger.info(`  → FILTERED: Too few words (${line.wordCount}, minimum: ${minWords})`);
         return false;
       }
       
@@ -421,7 +432,21 @@ class VisionService {
       }
       
       // Filter out very generic or short phrases that are unlikely to be titles
+      // BUT be more lenient in fallback mode for podcast names
       if (description.length < 8 && !description.match(/\b(with|and|of|the|in|on|at|by)\b/)) {
+        // In fallback mode, allow common podcast name patterns even if short
+        if (isFallbackArea && (
+          description.includes('planet') || 
+          description.includes('money') || 
+          description.includes('marketplace') ||
+          description.includes('serial') ||
+          description.includes('radiolab') ||
+          description.includes('freakonomics') ||
+          description.includes('npr')
+        )) {
+          logger.info(`  → KEPT: Common podcast name pattern in fallback mode`);
+          return true;
+        }
         logger.info(`  → FILTERED: Too short and no connecting words`);
         return false; // Too short and no connecting words typical of titles
       }
