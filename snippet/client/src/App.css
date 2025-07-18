@@ -1,0 +1,15 @@
+.App {
+  text-align: center;
+  min-height: 100vh;
+  background-color: #f8fafc;
+}
+
+.App-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+} 
