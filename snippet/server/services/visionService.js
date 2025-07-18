@@ -32,7 +32,24 @@ async function extractTextFromImage(imagePath) {
     const detections = result.textAnnotations;
 
     if (!detections || detections.length === 0) {
-      return { timestamp: null, title: null, episode: null };
+      return {
+        firstPass: {
+          podcastTitle: null,
+          episodeTitle: null,
+          timestamp: null,
+          player: 'no_text'
+        },
+        secondPass: {
+          podcastTitle: null,
+          episodeTitle: null,
+          timestamp: null,
+          player: 'no_text'
+        },
+        validation: {
+          validated: false,
+          confidence: 0
+        }
+      };
     }
 
     const fullText = detections[0].description;
@@ -44,7 +61,25 @@ async function extractTextFromImage(imagePath) {
     // Extract title and episode (look in bottom 50%-87.5% of screen)
     const { title, episode } = extractTitleAndEpisode(textBlocks);
 
-    return { timestamp, title, episode };
+    // Return in the format expected by the server
+    return {
+      firstPass: {
+        podcastTitle: title,
+        episodeTitle: episode,
+        timestamp: timestamp,
+        player: 'detected'
+      },
+      secondPass: {
+        podcastTitle: title,
+        episodeTitle: episode,
+        timestamp: timestamp,
+        player: 'detected'
+      },
+      validation: {
+        validated: false,
+        confidence: 0
+      }
+    };
   } catch (error) {
     console.error('Vision API error:', error);
     throw new Error('Failed to extract text from image');
