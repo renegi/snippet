@@ -412,8 +412,8 @@ const MainContent = ({
         {/* Generate transcript button or progress bar */}
         <div className="w-full max-w-[361px] flex justify-center">
           {isProcessing ? (
-            <div className="self-stretch rounded-[24px] h-16 flex items-center justify-center px-6">
-              <div className="w-full">
+            <div className="w-full max-w-[361px] rounded-[24px] h-16 flex items-center justify-center">
+              <div className="w-full px-6">
                 {/* Progress bar container */}
                 <div className="w-full bg-[#c4c0b7] rounded-full h-2 mb-2">
                   <div 
