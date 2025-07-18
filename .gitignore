@@ -88,7 +88,7 @@ dist
 
 # Gatsby files
 .cache/
-# public
+# Note: public/ is NOT ignored as it contains static assets needed for deployment
 
 # Storybook build outputs
 .out

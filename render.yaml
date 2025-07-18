@@ -1,16 +1,24 @@
 services:
   - type: web
-    name: snippet
+    name: snippet-backend
     env: node
     plan: free
-    buildCommand: npm run build
-    startCommand: npm start
+    buildCommand: cd snippet/server && npm install
+    startCommand: cd snippet/server && npm start
     envVars:
       - key: NODE_ENV
         value: production
-      - key: GOOGLE_CLOUD_PROJECT_ID
-        sync: false
       - key: ASSEMBLYAI_API_KEY
         sync: false
-      - key: GOOGLE_APPLICATION_CREDENTIALS_BASE64
+      - key: GOOGLE_VISION_API_KEY
         sync: false
+
+  - type: web
+    name: snippet-frontend
+    env: static
+    plan: free
+    buildCommand: cd snippet/client && npm install && npm run build
+    staticPublishPath: snippet/client/build
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://snippet-backend.onrender.com 
