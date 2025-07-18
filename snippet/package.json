@@ -1,0 +1,19 @@
+{
+  "name": "snippet",
+  "version": "1.0.0",
+  "description": "Snippet - AI-powered podcast quote extraction from screenshots",
+  "scripts": {
+    "build": "cd client && npm install && npm run build",
+    "start": "cd server && npm install && npm start",
+    "install-all": "cd client && npm install && cd ../server && npm install",
+    "dev": "cd server && npm run dev"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0"
+  }
+} 

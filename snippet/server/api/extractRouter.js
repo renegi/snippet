@@ -1,71 +1,99 @@
 const express = require('express');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const visionService = require('../services/visionService');
-
 const router = express.Router();
+const upload = require('../middleware/upload');
+const visionService = require('../services/visionService');
+const logger = require('../utils/logger');
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'screenshots-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({ 
-  storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed!'), false);
-    }
-  }
-});
-
-// Extract text from uploaded screenshots
-router.post('/text', upload.array('screenshots', 10), async (req, res) => {
+router.post('/', upload.array('screenshots', 5), async (req, res, next) => {
   try {
+    logger.info('📱 Mobile Debug: Extract request received', {
+      filesCount: req.files?.length || 0,
+      userAgent: req.headers['user-agent'],
+      isMobile: /iPhone|iPad|iPod|Android/i.test(req.headers['user-agent'] || ''),
+      contentLength: req.headers['content-length']
+    });
+
     if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: 'No screenshots uploaded' });
+      logger.warn('📱 Mobile Debug: No files uploaded');
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'No files uploaded'
+        }
+      });
     }
+
+    logger.info('📱 Mobile Debug: Files received', req.files.map((file, index) => ({
+      index,
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      sizeInMB: (file.size / 1024 / 1024).toFixed(2) + 'MB',
+      path: file.path
+    })));
 
     const results = [];
-    
-    for (const file of req.files) {
+    for (let i = 0; i < req.files.length; i++) {
+      const file = req.files[i];
+      logger.info(`📱 Mobile Debug: Processing file ${i + 1}/${req.files.length}: ${file.originalname}`);
+      
+      const startTime = Date.now();
       try {
-        const extractedData = await visionService.extractTextFromImage(file.path);
-        results.push({
-          filename: file.filename,
-          timestamp: extractedData.timestamp,
-          title: extractedData.title,
-          episode: extractedData.episode
+        // Check file size and add warning for large mobile images
+        const fileSizeMB = file.size / 1024 / 1024;
+        if (fileSizeMB > 5) {
+          logger.warn(`📱 Mobile Debug: Large file detected (${fileSizeMB.toFixed(2)}MB) - ${file.originalname}`);
+        }
+        
+      const podcastInfo = await visionService.extractText(file.path);
+        const endTime = Date.now();
+        
+        logger.info(`📱 Mobile Debug: File ${i + 1} processed successfully`, {
+          processingTime: `${endTime - startTime}ms`,
+          podcastTitle: podcastInfo.firstPass?.podcastTitle || podcastInfo.secondPass?.podcastTitle,
+          episodeTitle: podcastInfo.firstPass?.episodeTitle || podcastInfo.secondPass?.episodeTitle,
+          timestamp: podcastInfo.firstPass?.timestamp || podcastInfo.secondPass?.timestamp,
+          validated: podcastInfo.validation?.validated,
+          player: podcastInfo.firstPass?.player || podcastInfo.secondPass?.player
         });
-      } catch (error) {
-        console.error(`Error processing ${file.filename}:`, error);
+        
+      results.push(podcastInfo);
+      } catch (fileError) {
+        const endTime = Date.now();
+        logger.error(`📱 Mobile Debug: Error processing file ${i + 1}:`, {
+          file: file.originalname,
+          error: fileError.message,
+          processingTime: `${endTime - startTime}ms`,
+          stack: fileError.stack
+        });
+        
+        // Add error result instead of breaking the whole process
         results.push({
-          filename: file.filename,
-          error: error.message
+          error: true,
+          message: `Failed to process ${file.originalname}: ${fileError.message}`,
+          firstPass: { error: true },
+          secondPass: { error: true }
         });
       }
     }
 
-    res.json({ results });
+    logger.info('📱 Mobile Debug: All files processed', {
+      totalFiles: req.files.length,
+      successfulFiles: results.filter(r => !r.error).length,
+      failedFiles: results.filter(r => r.error).length
+    });
+
+    res.json({
+      success: true,
+      data: results
+    });
   } catch (error) {
-    console.error('Extract text error:', error);
-    res.status(500).json({ error: 'Failed to extract text from screenshots' });
+    logger.error('📱 Mobile Debug: Extract router error:', {
+      error: error.message,
+      stack: error.stack,
+      userAgent: req.headers['user-agent']
+    });
+    next(error);
   }
 });
 

@@ -24,7 +24,7 @@ const PrimaryButtonL = ({
 
   return (
     <button
-      className={`cursor-pointer h-16 px-6 bg-[#1b1b1b] w-[361px] rounded-[24px] box-border flex flex-row items-center justify-center gap-2 border-[1px] border-solid border-[#1b1b1b] hover:bg-[#333] hover:box-border hover:border-[1px] hover:border-solid hover:border-[#333] disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+      className={`cursor-pointer h-16 px-6 bg-[#1b1b1b] w-full max-w-[361px] rounded-[24px] box-border flex flex-row items-center justify-center gap-2 border-[1px] border-solid border-[#1b1b1b] hover:bg-[#333] hover:box-border hover:border-[1px] hover:border-solid hover:border-[#333] disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
       onClick={handleClick}
       onTouchStart={handleTouchStart}
       disabled={disabled}

@@ -37,7 +37,19 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   }, [initialFiles]);
 
   const handleFileChange = (event) => {
-    const selectedFiles = Array.from(event.target.files);
+    console.log('📱 Mobile Debug: File input changed', {
+      filesCount: event.target.files?.length || 0,
+      isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    });
+    
+    const selectedFiles = Array.from(event.target.files || []);
+    
+    if (selectedFiles.length === 0) {
+      console.log('📱 Mobile Debug: No files selected');
+      return;
+    }
+    
+    console.log('📱 Mobile Debug: Selected files:', selectedFiles.map(f => ({ name: f.name, size: f.size, type: f.type })));
     
     // Track the number of episodes that were already processed before adding new ones
     const previousEpisodeCount = files.length;
@@ -47,7 +59,15 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     setFiles(updatedFiles);
     
     // Create preview URLs for new files and append to existing previews
-    const newPreviews = selectedFiles.map(file => URL.createObjectURL(file));
+    const newPreviews = selectedFiles.map(file => {
+      try {
+        return URL.createObjectURL(file);
+      } catch (error) {
+        console.error('📱 Mobile Debug: Error creating preview URL:', error);
+        return null;
+      }
+    }).filter(Boolean);
+    
     const updatedPreviews = [...previews, ...newPreviews];
     setPreviews(updatedPreviews);
     
@@ -56,6 +76,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     
     // Automatically process all files (existing + new) after selection
     if (selectedFiles.length > 0) {
+      console.log('📱 Mobile Debug: Processing files...');
       processFiles(updatedFiles);
     }
     
@@ -65,19 +86,66 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
 
   const processFiles = async (filesToProcess) => {
     setIsProcessing(true);
+    
+    console.log('📱 Mobile Debug: Starting file processing', {
+      fileCount: filesToProcess.length,
+      totalSize: filesToProcess.reduce((sum, file) => sum + file.size, 0),
+      files: filesToProcess.map(f => ({ 
+        name: f.name, 
+        size: f.size, 
+        type: f.type,
+        sizeInMB: (f.size / 1024 / 1024).toFixed(2) + 'MB'
+      })),
+      isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    });
+    
     try {
       const formData = new FormData();
-      filesToProcess.forEach(file => formData.append('screenshots', file));
+      filesToProcess.forEach((file, index) => {
+        console.log(`📱 Mobile Debug: Adding file ${index + 1} to FormData:`, {
+          name: file.name,
+          size: file.size,
+          type: file.type
+        });
+        formData.append('screenshots', file);
+      });
       formData.append('timeRange', JSON.stringify(timeRange));
 
+      console.log('📱 Mobile Debug: Sending request to server...');
+      const startTime = Date.now();
+
       const result = await processScreenshots(formData);
+      
+      const endTime = Date.now();
+      console.log('📱 Mobile Debug: Server response received', {
+        processingTime: `${endTime - startTime}ms`,
+        success: result.success,
+        dataLength: result.data?.length || 0,
+        hasError: !!result.error
+      });
+      
+      if (result.success && result.data) {
+        console.log('📱 Mobile Debug: Processing results:', result.data.map((item, index) => ({
+          index,
+          podcastTitle: item.firstPass?.podcastTitle || item.secondPass?.podcastTitle,
+          episodeTitle: item.firstPass?.episodeTitle || item.secondPass?.episodeTitle,
+          timestamp: item.firstPass?.timestamp || item.secondPass?.timestamp,
+          validated: item.validation?.validated,
+          player: item.firstPass?.player || item.secondPass?.player
+        })));
+      }
+      
       setPodcastInfo(result);
       // Update the count of processed episodes
       setProcessedEpisodeCount(result?.data?.length || 0);
       // Clear previous transcripts when processing new screenshots
       setTranscripts({});
     } catch (error) {
-      console.error('Error processing screenshots:', error);
+      console.error('📱 Mobile Debug: Error processing screenshots:', {
+        error: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       // TODO: Add error handling UI
     } finally {
       setIsProcessing(false);
@@ -85,8 +153,17 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   };
 
   const handleAddScreenshots = () => {
+    console.log('📱 Mobile Debug: Add screenshots button clicked');
+    
     if (fileInputRef.current) {
+      console.log('📱 Mobile Debug: Triggering file input click');
+      
+      // Add a small delay for mobile browsers
+      setTimeout(() => {
       fileInputRef.current.click();
+      }, 100);
+    } else {
+      console.error('📱 Mobile Debug: File input ref not found');
     }
   };
 
@@ -277,7 +354,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   // Show new UI when requested (even without files initially)
   if (showNewUI) {
     return (
-      <div className="w-[393px] mx-auto">
+      <div className="w-full max-w-[393px] mx-auto px-4">
         <TimeRangeSelection
           screenshots={screenshots}
           onAddScreenshots={handleAddScreenshots}
@@ -289,7 +366,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
         <input
           type="file"
           multiple
-          accept="image/*"
+          accept="image/*,image/jpeg,image/jpg,image/png,image/heic,image/heif"
           className="hidden"
           onChange={handleFileChange}
           ref={fileInputRef}
@@ -334,7 +411,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
                   id="file-upload"
                   type="file"
                   multiple
-                  accept="image/*"
+                  accept="image/*,image/jpeg,image/jpg,image/png,image/heic,image/heif"
                   className="hidden"
                   onChange={handleFileChange}
                   ref={fileInputRef}
@@ -370,7 +447,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           {/* Process Button or Loading Bar */}
           <div className="flex justify-center min-h-[56px]">
             {isProcessing ? (
-              <div className="w-full max-w-xs">
+              <div className="w-full max-w-[361px]">
                 <div className="w-full bg-gray-200 rounded-full h-4">
                   <div className="bg-indigo-600 h-4 rounded-full animate-pulse" style={{ width: '80%' }}></div>
                 </div>

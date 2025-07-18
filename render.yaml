@@ -1,26 +1,17 @@
 services:
   - type: web
-    name: snippet-backend
+    name: podquote
     env: node
     plan: free
-    rootDir: snippet/server
-    buildCommand: npm install
+    rootDir: snippet
+    buildCommand: npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
+      - key: GOOGLE_CLOUD_PROJECT_ID
+        sync: false
       - key: ASSEMBLYAI_API_KEY
         sync: false
-      - key: GOOGLE_VISION_API_KEY
-        sync: false
-
-  - type: web
-    name: snippet-frontend
-    env: static
-    plan: free
-    rootDir: snippet/client
-    buildCommand: npm install && npm run build
-    staticPublishPath: build
-    envVars:
-      - key: REACT_APP_API_URL
-        value: https://snippet-backend.onrender.com 
+      - key: GOOGLE_APPLICATION_CREDENTIALS_BASE64
+        sync: false 

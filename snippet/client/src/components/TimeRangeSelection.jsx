@@ -19,30 +19,30 @@ const TimeRangeSelection = ({
   const simulateProgress = () => {
     const stages = [
       // Getting audio clip
-      { stage: "Getting audio clip", progress: 5, duration: 200 },
-      { stage: "Getting audio clip", progress: 10, duration: 300 },
-      { stage: "Getting audio clip", progress: 18, duration: 400 },
-      { stage: "Getting audio clip", progress: 25, duration: 500 },
-      { stage: "Getting audio clip", progress: 32, duration: 400 },
-      { stage: "Getting audio clip", progress: 35, duration: 300 },
+      { stage: "Getting audio clip...", progress: 5, duration: 200 },
+      { stage: "Getting audio clip...", progress: 10, duration: 300 },
+      { stage: "Getting audio clip...", progress: 18, duration: 400 },
+      { stage: "Getting audio clip...", progress: 25, duration: 500 },
+      { stage: "Getting audio clip...", progress: 32, duration: 400 },
+      { stage: "Getting audio clip...", progress: 35, duration: 300 },
       
       // Generating transcript
-      { stage: "Generating transcript", progress: 40, duration: 300 },
-      { stage: "Generating transcript", progress: 45, duration: 500 },
-      { stage: "Generating transcript", progress: 50, duration: 600 },
-      { stage: "Generating transcript", progress: 55, duration: 700 },
-      { stage: "Generating transcript", progress: 60, duration: 800 },
-      { stage: "Generating transcript", progress: 65, duration: 600 },
-      { stage: "Generating transcript", progress: 70, duration: 500 },
-      { stage: "Generating transcript", progress: 75, duration: 400 },
-      { stage: "Generating transcript", progress: 80, duration: 300 },
+      { stage: "Generating transcript...", progress: 40, duration: 300 },
+      { stage: "Generating transcript...", progress: 45, duration: 500 },
+      { stage: "Generating transcript...", progress: 50, duration: 600 },
+      { stage: "Generating transcript...", progress: 55, duration: 700 },
+      { stage: "Generating transcript...", progress: 60, duration: 800 },
+      { stage: "Generating transcript...", progress: 65, duration: 600 },
+      { stage: "Generating transcript...", progress: 70, duration: 500 },
+      { stage: "Generating transcript...", progress: 75, duration: 400 },
+      { stage: "Generating transcript...", progress: 80, duration: 300 },
       
       // Finalizing
-      { stage: "Finalizing", progress: 85, duration: 300 },
-      { stage: "Finalizing", progress: 90, duration: 400 },
-      { stage: "Finalizing", progress: 95, duration: 500 },
-      { stage: "Finalizing", progress: 98, duration: 300 },
-      { stage: "Finalizing", progress: 100, duration: 200 }
+      { stage: "Finalizing...", progress: 85, duration: 300 },
+      { stage: "Finalizing...", progress: 90, duration: 400 },
+      { stage: "Finalizing...", progress: 95, duration: 500 },
+      { stage: "Finalizing...", progress: 98, duration: 300 },
+      { stage: "Finalizing...", progress: 100, duration: 200 }
     ];
 
     let currentStageIndex = 0;
@@ -134,9 +134,14 @@ const TimeRangeSelection = ({
     setCurrentEpisodeIndex(newIndex);
   };
 
+  // Scroll to top when component mounts or when switching screens
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [showTranscript]);
+
   if (showTranscript && episodes.length > 0) {
     return (
-      <div className="w-full max-w-md mx-auto">
+      <div className="w-full max-w-[393px] mx-auto">
         <TranscriptHighlighting
           episodes={episodes}
           currentEpisodeIndex={currentEpisodeIndex}
@@ -150,7 +155,7 @@ const TimeRangeSelection = ({
   }
       
   return (
-    <div className="w-full max-w-md mx-auto">
+    <div className="w-full max-w-[393px] mx-auto">
       {/* Main Content - Remove browser chrome */}
       <MainContent 
         screenshots={screenshots}

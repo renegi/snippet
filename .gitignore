@@ -1,7 +1,8 @@
 # Dependencies
 node_modules/
-*/node_modules/
-**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Environment variables
 .env
@@ -11,12 +12,7 @@ node_modules/
 .env.production.local
 
 # Logs
-logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
 combined.log
 error.log
 
@@ -28,28 +24,24 @@ pids
 
 # Coverage directory used by tools like istanbul
 coverage/
-*.lcov
 
 # nyc test coverage
 .nyc_output
 
-# Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
+# Grunt intermediate storage
 .grunt
 
-# Bower dependency directory (https://bower.io/)
+# Bower dependency directory
 bower_components
 
 # node-waf configuration
 .lock-wscript
 
-# Compiled binary addons (https://nodejs.org/api/addons.html)
+# Compiled binary addons
 build/Release
 
 # Dependency directories
 jspm_packages/
-
-# TypeScript cache
-*.tsbuildinfo
 
 # Optional npm cache directory
 .npm
@@ -75,7 +67,7 @@ jspm_packages/
 # dotenv environment variables file
 .env.test
 
-# parcel-bundler cache (https://parceljs.org/)
+# parcel-bundler cache
 .cache
 .parcel-cache
 
@@ -88,7 +80,7 @@ dist
 
 # Gatsby files
 .cache/
-# Note: public/ is NOT ignored as it contains static assets needed for deployment
+public
 
 # Storybook build outputs
 .out
@@ -114,13 +106,27 @@ temp/
 ehthumbs.db
 Thumbs.db
 
-# Upload directories
+# Uploaded files (screenshots)
 uploads/
-server/uploads/
+snippet/server/uploads/
 
 # Vercel
 .vercel/
 
-# Build outputs
-build/
-dist/ 
+# Local development files
+*.local
+
+# Build artifacts (keep these for deployment)
+# snippet/client/build/ - KEEP FOR RENDER DEPLOYMENT
+
+# API keys and secrets
+keys/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3 
