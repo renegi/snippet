@@ -7,15 +7,6 @@ class VisionService {
     // Handle different authentication methods for different environments
     let clientConfig = {};
     
-    logger.info('📱 Mobile Debug: Initializing Vision Service', {
-      hasBase64Credentials: !!process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64,
-      hasClientEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
-      hasPrivateKey: !!process.env.GOOGLE_PRIVATE_KEY,
-      hasCredentialsFile: !!process.env.GOOGLE_APPLICATION_CREDENTIALS,
-      hasProjectId: !!process.env.GOOGLE_CLOUD_PROJECT_ID,
-      nodeEnv: process.env.NODE_ENV
-    });
-    
     if (process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64) {
       // For Render: decode base64 credentials
       try {
@@ -26,13 +17,8 @@ class VisionService {
           credentials: credentials,
           projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || credentials.project_id
         };
-        logger.info('📱 Mobile Debug: Using base64 credentials', {
-          hasCredentials: !!credentials,
-          projectId: clientConfig.projectId,
-          credentialsKeys: credentials ? Object.keys(credentials) : []
-        });
       } catch (error) {
-        logger.error('📱 Mobile Debug: Error parsing base64 credentials:', error);
+        console.error('Error parsing base64 credentials:', error);
         throw error;
       }
     } else if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
@@ -45,33 +31,17 @@ class VisionService {
         },
         projectId: process.env.GOOGLE_CLOUD_PROJECT_ID
       };
-      logger.info('📱 Mobile Debug: Using individual credential fields', {
-        hasClientEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
-        hasPrivateKey: !!process.env.GOOGLE_PRIVATE_KEY,
-        projectId: clientConfig.projectId
-      });
     } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
       // For local development: use file path
       clientConfig = {
         keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
         projectId: process.env.GOOGLE_CLOUD_PROJECT_ID
       };
-      logger.info('📱 Mobile Debug: Using credentials file', {
-        keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-        projectId: clientConfig.projectId
-      });
     } else {
-      logger.error('📱 Mobile Debug: No valid Google Cloud credentials found');
       throw new Error('No valid Google Cloud credentials found. Please set GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY, or GOOGLE_APPLICATION_CREDENTIALS_BASE64');
     }
     
-    try {
-      this.client = new vision.ImageAnnotatorClient(clientConfig);
-      logger.info('📱 Mobile Debug: Vision client created successfully');
-    } catch (error) {
-      logger.error('📱 Mobile Debug: Error creating Vision client:', error);
-      throw error;
-    }
+    this.client = new vision.ImageAnnotatorClient(clientConfig);
   }
 
   async extractText(imagePath) {
@@ -92,25 +62,12 @@ class VisionService {
       logger.info('📱 Mobile Debug: Vision API call completed successfully');
       const detections = result.textAnnotations;
       
-      logger.info('📱 Mobile Debug: Vision API raw result', {
-        hasResult: !!result,
-        hasTextAnnotations: !!detections,
-        detectionsLength: detections?.length || 0,
-        resultKeys: result ? Object.keys(result) : []
-      });
-      
       if (!detections || detections.length === 0) {
-        logger.warn('📱 Mobile Debug: No text detected in image');
         throw new Error('No text detected in image');
       }
 
       // Get the full text from the first annotation
       const fullText = detections[0].description;
-      
-      logger.info('📱 Mobile Debug: Full OCR text length', {
-        textLength: fullText?.length || 0,
-        textPreview: fullText?.substring(0, 200) + '...' || 'No text'
-      });
       
       // DEBUG: Log all detected text
       logger.info('=== FULL OCR TEXT ===');
@@ -125,14 +82,6 @@ class VisionService {
       
       // Extract podcast information using positioning data
       const podcastInfo = this.parsePodcastInfoWithPositioning(detections, fullText);
-      
-      logger.info('📱 Mobile Debug: Parsed podcast info', {
-        podcastTitle: podcastInfo.podcastTitle,
-        episodeTitle: podcastInfo.episodeTitle,
-        timestamp: podcastInfo.timestamp,
-        player: podcastInfo.player,
-        hasDebugInfo: !!podcastInfo.debug
-      });
       
       // Store original OCR results (first pass)
       const originalOCR = {
@@ -187,8 +136,6 @@ class VisionService {
             podcastInfo.player = 'unvalidated';
           }
         }
-      } else {
-        logger.warn('📱 Mobile Debug: No podcast title or episode title found in OCR results');
       }
       
       // Add original OCR results for UI comparison
@@ -200,12 +147,6 @@ class VisionService {
         player: podcastInfo.player,
         validation: podcastInfo.validation
       };
-      
-      logger.info('📱 Mobile Debug: Final podcast info', {
-        firstPass: podcastInfo.firstPass,
-        secondPass: podcastInfo.secondPass,
-        validation: podcastInfo.validation
-      });
       
       return podcastInfo;
     } catch (error) {
@@ -380,9 +321,18 @@ class VisionService {
       bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
       logger.info(`Fallback detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
     }
+    
+    // NEW: If still no candidates, try a broader area that includes the upper-middle section
+    // This helps capture episode titles like "Made in America" that appear above the cover art
+    if (bottomLines.length < 2) {
+      bottomThreshold = maxY * (1 / 8); // Start at 12.5% (include upper area)
+      topThreshold = maxY * (9 / 10); // End at 90% (exclude bottom 10%)
+      bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
+      logger.info(`Broad fallback detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
+    }
 
     // Filter for podcast/episode title candidates:
-    // 1. Must have multiple words (at least 2)
+    // 1. Must have multiple words (at least 2, or 1 in fallback mode)
     // 2. Must be reasonable length (3-50 chars)
     // 3. Must not be UI elements, dates, or times
     const titleCandidates = bottomLines.filter(line => {
@@ -395,8 +345,10 @@ class VisionService {
       logger.info(`Considering line: "${line.text}" (Y=${line.avgY}, wordCount=${line.wordCount}, length=${description.length})`);
       
       // Must have multiple words (more lenient in fallback mode)
-      if (line.wordCount < 2) {
-        logger.info(`  → FILTERED: Too few words (${line.wordCount})`);
+      // Allow single words in fallback mode for podcast names like "PLANET MONEY"
+      const minWords = isFallbackArea ? 1 : 2;
+      if (line.wordCount < minWords) {
+        logger.info(`  → FILTERED: Too few words (${line.wordCount}, minimum: ${minWords})`);
         return false;
       }
       
@@ -480,6 +432,7 @@ class VisionService {
       }
       
       // Filter out very generic or short phrases that are unlikely to be titles
+      // BUT be more lenient in fallback mode for podcast names
       if (description.length < 8 && !description.match(/\b(with|and|of|the|in|on|at|by)\b/)) {
         logger.info(`  → FILTERED: Too short and no connecting words`);
         return false; // Too short and no connecting words typical of titles
