@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "Snippet - AI-powered podcast quote extraction from screenshots",
   "scripts": {
-    "build": "cd client && npm install && npm run build",
-    "start": "cd server && npm install && npm start",
-    "install-all": "cd client && npm install && cd ../server && npm install",
-    "dev": "cd server && npm run dev"
+    "build": "cd snippet/client && npm install && npm run build",
+    "start": "cd snippet/server && npm install && npm start",
+    "install-all": "cd snippet/client && npm install && cd ../server && npm install",
+    "dev": "cd snippet/server && npm run dev"
   },
   "engines": {
     "node": ">=18.0.0"

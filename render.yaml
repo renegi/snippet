@@ -3,7 +3,6 @@ services:
     name: podquote
     env: node
     plan: free
-    rootDir: snippet
     buildCommand: npm run build
     startCommand: npm start
     envVars:
