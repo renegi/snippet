@@ -146,7 +146,16 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
         stack: error.stack,
         name: error.name
       });
-      // TODO: Add error handling UI
+      
+      // Show error to user
+      alert(`Error processing screenshots: ${error.message}\n\nPlease try again or contact support if the issue persists.`);
+      
+      // Set error state for UI feedback
+      setPodcastInfo({
+        success: false,
+        error: error.message,
+        data: []
+      });
     } finally {
       setIsProcessing(false);
     }
