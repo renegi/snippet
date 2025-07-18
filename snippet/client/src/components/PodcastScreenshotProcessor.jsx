@@ -5,7 +5,6 @@ import TimeRangeSelection from './TimeRangeSelection';
 function PodcastScreenshotProcessor({ setCurrentScreen }) {
   const [screenshots, setScreenshots] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [results, setResults] = useState(null);
 
   const handleScreenshotsSelected = (files) => {
     setScreenshots(Array.from(files));
@@ -28,7 +27,6 @@ function PodcastScreenshotProcessor({ setCurrentScreen }) {
       });
 
       const data = await response.json();
-      setResults(data.results);
       setCurrentScreen('highlighting');
     } catch (error) {
       console.error('Error processing screenshots:', error);
