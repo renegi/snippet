@@ -3,8 +3,9 @@ services:
     name: snippet-backend
     env: node
     plan: free
-    buildCommand: cd snippet/server && npm install
-    startCommand: cd snippet/server && npm start
+    rootDir: snippet/server
+    buildCommand: npm install
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
@@ -17,8 +18,9 @@ services:
     name: snippet-frontend
     env: static
     plan: free
-    buildCommand: cd snippet/client && npm install && npm run build
-    staticPublishPath: snippet/client/build
+    rootDir: snippet/client
+    buildCommand: npm install && npm run build
+    staticPublishPath: build
     envVars:
       - key: REACT_APP_API_URL
         value: https://snippet-backend.onrender.com 
