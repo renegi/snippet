@@ -434,19 +434,6 @@ class VisionService {
       // Filter out very generic or short phrases that are unlikely to be titles
       // BUT be more lenient in fallback mode for podcast names
       if (description.length < 8 && !description.match(/\b(with|and|of|the|in|on|at|by)\b/)) {
-        // In fallback mode, allow common podcast name patterns even if short
-        if (isFallbackArea && (
-          description.includes('planet') || 
-          description.includes('money') || 
-          description.includes('marketplace') ||
-          description.includes('serial') ||
-          description.includes('radiolab') ||
-          description.includes('freakonomics') ||
-          description.includes('npr')
-        )) {
-          logger.info(`  → KEPT: Common podcast name pattern in fallback mode`);
-          return true;
-        }
         logger.info(`  → FILTERED: Too short and no connecting words`);
         return false; // Too short and no connecting words typical of titles
       }
