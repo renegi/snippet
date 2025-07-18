@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Podcast quote extraction app",
   "scripts": {
-    "build": "cd snippet/client && npm install && npm run build",
-    "start": "cd snippet/server && npm install && npm start",
+    "build": "cd snippet/client && npm install && npm run build && cd ../server && npm install",
+    "start": "cd snippet/server && npm start",
     "dev": "concurrently \"cd snippet/client && npm start\" \"cd snippet/server && npm run dev\"",
     "install-all": "npm install && cd snippet/client && npm install && cd ../server && npm install"
   },
