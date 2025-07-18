@@ -80,63 +80,8 @@ class VisionService {
       });
       logger.info('=== END DEBUG ===');
       
-      // Extract podcast information using positioning data
-      const podcastInfo = this.parsePodcastInfoWithPositioning(detections, fullText);
-      
-      // Store original OCR results (first pass)
-      const originalOCR = {
-        podcastTitle: podcastInfo.podcastTitle,
-        episodeTitle: podcastInfo.episodeTitle,
-        timestamp: podcastInfo.timestamp,
-        player: podcastInfo.player
-      };
-      
-      // Validate the extracted info against Apple Podcasts API
-      if (podcastInfo.podcastTitle || podcastInfo.episodeTitle) {
-        logger.info('Attempting to validate podcast info with Apple Podcasts API...');
-        const validation = await applePodcastsService.validatePodcastInfo(
-          podcastInfo.podcastTitle,
-          podcastInfo.episodeTitle
-        );
-        
-        podcastInfo.validation = validation;
-        
-        // If validation succeeded with high confidence, use the validated titles
-        if (validation.validated && validation.confidence >= 0.7) {
-          logger.info('High confidence validation successful, using validated titles');
-          podcastInfo.podcastTitle = validation.validatedPodcast.title;
-          if (validation.validatedEpisode) {
-            podcastInfo.episodeTitle = validation.validatedEpisode.title;
-          }
-          podcastInfo.player = 'validated';
-        } else if (validation.validated && validation.confidence >= 0.6) {
-          logger.info('Moderate confidence validation, keeping original with suggestions');
-          // Keep original titles but provide suggestions
-          podcastInfo.player = 'partially_validated';
-        } else {
-          logger.info('Primary validation failed, trying fallback combinations...');
-          
-          // Get all potential title candidates from debug info
-          const allCandidates = podcastInfo.debug?.titleCandidates || [];
-          const fallbackResult = await this.tryFallbackValidation(
-            podcastInfo.podcastTitle,
-            podcastInfo.episodeTitle,
-            allCandidates
-          );
-          
-          if (fallbackResult.success) {
-            logger.info('Fallback validation successful!', fallbackResult);
-            podcastInfo.podcastTitle = fallbackResult.validatedPodcast;
-            podcastInfo.episodeTitle = fallbackResult.validatedEpisode;
-            podcastInfo.validation = fallbackResult.validation;
-            podcastInfo.validation.fallbackSource = fallbackResult.fallbackSource;
-            podcastInfo.player = 'validated_fallback';
-          } else {
-            logger.info('All validation attempts failed, keeping original OCR results');
-            podcastInfo.player = 'unvalidated';
-          }
-        }
-      }
+      // Extract podcast information using positioning data with tiered search
+      const podcastInfo = await this.extractWithTieredValidation(detections, fullText);
       
       // Add original OCR results for UI comparison
       podcastInfo.firstPass = originalOCR;
@@ -259,7 +204,66 @@ class VisionService {
     };
   }
 
-  parsePodcastInfoWithPositioning(textAnnotations, fullText) {
+  async extractWithTieredValidation(textAnnotations, fullText) {
+    // Step 1: Search for episode/podcast in 50%-87.5% area
+    logger.info('=== STEP 1: Searching in primary area (50%-87.5%) ===');
+    const primaryCandidates = this.parsePodcastInfoWithPositioning(textAnnotations, fullText, 'primary');
+    
+    // Validate primary candidates with Apple API
+    if (primaryCandidates.podcastTitle || primaryCandidates.episodeTitle) {
+      logger.info('Validating primary candidates with Apple Podcasts API...');
+      const validation = await applePodcastsService.validatePodcastInfo(
+        primaryCandidates.podcastTitle,
+        primaryCandidates.episodeTitle
+      );
+      
+      if (validation.validated && validation.confidence >= 0.6) {
+        logger.info('Primary validation successful!', validation);
+        return {
+          ...primaryCandidates,
+          validation,
+          player: 'validated_primary',
+          searchArea: 'primary'
+        };
+      } else {
+        logger.info('Primary validation failed, trying fallback area...');
+      }
+    }
+    
+    // Step 2: If validation fails, search in 10%-50% area
+    logger.info('=== STEP 2: Searching in fallback area (10%-50%) ===');
+    const fallbackCandidates = this.parsePodcastInfoWithPositioning(textAnnotations, fullText, 'fallback');
+    
+    // Validate fallback candidates with Apple API
+    if (fallbackCandidates.podcastTitle || fallbackCandidates.episodeTitle) {
+      logger.info('Validating fallback candidates with Apple Podcasts API...');
+      const validation = await applePodcastsService.validatePodcastInfo(
+        fallbackCandidates.podcastTitle,
+        fallbackCandidates.episodeTitle
+      );
+      
+      if (validation.validated && validation.confidence >= 0.6) {
+        logger.info('Fallback validation successful!', validation);
+        return {
+          ...fallbackCandidates,
+          validation,
+          player: 'validated_fallback',
+          searchArea: 'fallback'
+        };
+      }
+    }
+    
+    // If both areas fail, return the best candidate from primary area
+    logger.info('Both validation attempts failed, returning primary candidates');
+    return {
+      ...primaryCandidates,
+      validation: { validated: false, confidence: 0, error: 'No valid candidates found' },
+      player: 'unvalidated',
+      searchArea: 'primary'
+    };
+  }
+
+  parsePodcastInfoWithPositioning(textAnnotations, fullText, searchArea = 'primary') {
     // Skip the first annotation as it contains the full text
     const individualTexts = textAnnotations.slice(1);
 
@@ -299,37 +303,27 @@ class VisionService {
       return { text, avgY, avgX, avgArea, wordCount: sortedWords.length };
     });
 
-    // Only consider lines in the middle section (50%-87.5%) to avoid ads at the bottom
-    let bottomThreshold = maxY * (1 / 2); // Start at 50%
-    let topThreshold = maxY * (7 / 8); // End at 87.5% (exclude bottom 12.5%)
-    let bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
+    // Set detection area based on searchArea parameter
+    let bottomThreshold, topThreshold;
     
-    logger.info(`Primary detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
-    
-    // If we don't find enough candidates, expand the range slightly
-    if (bottomLines.length < 2) {
-      bottomThreshold = maxY * (2 / 5); // Start at 40%
-      topThreshold = maxY * (9 / 10); // End at 90% (exclude bottom 10%)
-      bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
-      logger.info(`Expanded detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
-    }
-    
-    // NEW: Fallback to bottom 90% if still no candidates found
-    if (bottomLines.length < 2) {
+    if (searchArea === 'primary') {
+      // Primary area: 50%-87.5% (middle section to avoid ads at bottom)
+      bottomThreshold = maxY * (1 / 2); // Start at 50%
+      topThreshold = maxY * (7 / 8); // End at 87.5% (exclude bottom 12.5%)
+      logger.info(`Primary detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
+    } else if (searchArea === 'fallback') {
+      // Fallback area: 10%-50% (upper section to capture episode titles above cover art)
       bottomThreshold = maxY * (1 / 10); // Start at 10%
-      topThreshold = maxY * (9 / 10); // End at 90% (exclude bottom 10%)
-      bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
+      topThreshold = maxY * (1 / 2); // End at 50%
       logger.info(`Fallback detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
+    } else {
+      // Default to primary area
+      bottomThreshold = maxY * (1 / 2);
+      topThreshold = maxY * (7 / 8);
+      logger.info(`Default detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
     }
     
-    // NEW: If still no candidates, try a broader area that includes the upper-middle section
-    // This helps capture episode titles like "Made in America" that appear above the cover art
-    if (bottomLines.length < 2) {
-      bottomThreshold = maxY * (1 / 8); // Start at 12.5% (include upper area)
-      topThreshold = maxY * (9 / 10); // End at 90% (exclude bottom 10%)
-      bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
-      logger.info(`Broad fallback detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
-    }
+    let bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
 
     // Filter for podcast/episode title candidates:
     // 1. Must have multiple words (at least 2, or 1 in fallback mode)
