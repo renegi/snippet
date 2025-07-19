@@ -133,6 +133,19 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           validated: item.validation?.validated,
           player: item.firstPass?.player || item.secondPass?.player
         })));
+        
+        // Add detailed logging to see the full structure
+        console.log('📱 Mobile Debug: Full result data structure:', JSON.stringify(result.data, null, 2));
+        
+        // Check if we have any valid data
+        const hasValidData = result.data.some(item => 
+          item.firstPass?.podcastTitle || 
+          item.secondPass?.podcastTitle || 
+          item.firstPass?.episodeTitle || 
+          item.secondPass?.episodeTitle
+        );
+        
+        console.log('📱 Mobile Debug: Has valid data:', hasValidData);
       }
       
       setPodcastInfo(result);
