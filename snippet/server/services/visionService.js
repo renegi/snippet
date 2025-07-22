@@ -299,6 +299,12 @@ class VisionService {
       return { text, avgY, avgX, avgArea, wordCount: sortedWords.length };
     });
 
+    // DEBUG: Log all detected lines for troubleshooting
+    logger.info('=== ALL DETECTED LINES ===');
+    joinedLines.forEach((line, index) => {
+      logger.info(`Line ${index}: "${line.text}" (Y=${line.avgY}, X=${line.avgX}, area=${line.avgArea}, words=${line.wordCount})`);
+    });
+    
     // Only consider lines in the middle section (50%-87.5%) to avoid ads at the bottom
     let bottomThreshold = maxY * (1 / 2); // Start at 50%
     let topThreshold = maxY * (7 / 8); // End at 87.5% (exclude bottom 12.5%)
@@ -322,6 +328,12 @@ class VisionService {
       logger.info(`Fallback detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
     }
 
+    // DEBUG: Log lines in detection area
+    logger.info('=== LINES IN DETECTION AREA ===');
+    bottomLines.forEach((line, index) => {
+      logger.info(`Detection area line ${index}: "${line.text}" (Y=${line.avgY}, X=${line.avgX}, area=${line.avgArea}, words=${line.wordCount})`);
+    });
+    
     // Filter for podcast/episode title candidates:
     // 1. Must have multiple words (at least 2, or 1 in fallback mode)
     // 2. Must be reasonable length (3-50 chars)
