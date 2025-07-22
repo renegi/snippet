@@ -559,11 +559,9 @@ class VisionService {
     // Sort by vertical position (top to bottom)
     allCandidates.sort((a, b) => a.avgY - b.avgY);
 
-    // Find episode and podcast titles based on multiple criteria:
-    // 1. Episode is typically above podcast
-    // 2. Episode titles are often longer/more descriptive
-    // 3. Podcast names are often shorter/brand names
-    // 4. Font size can vary, so we use it as a secondary factor
+    // Find episode and podcast titles based on position only:
+    // 1. Episode is above podcast (Y position)
+    // 2. Simple and reliable approach
     let episodeTitle = null;
     let podcastTitle = null;
 
@@ -571,61 +569,11 @@ class VisionService {
       // Sort candidates by Y position (top to bottom)
       const sortedByPosition = [...allCandidates].sort((a, b) => a.avgY - b.avgY);
       
-      // NEW: Use multiple criteria to determine episode vs podcast
-      const candidate1 = sortedByPosition[0]; // Top candidate
-      const candidate2 = sortedByPosition[1]; // Bottom candidate
+      // Simple assignment: episode is above podcast
+      episodeTitle = sortedByPosition[0].text.trim();
+      podcastTitle = sortedByPosition[1].text.trim();
       
-      // Calculate scores for each candidate being an episode
-      const getEpisodeScore = (candidate) => {
-        let score = 0;
-        
-        // Position score (episode is usually above)
-        score += 0.3;
-        
-        // Length score (episodes are usually longer/more descriptive)
-        const length = candidate.text.length;
-        if (length > 20) score += 0.3;
-        else if (length > 10) score += 0.2;
-        else if (length > 5) score += 0.1;
-        
-        // Word count score (episodes usually have more words)
-        const wordCount = candidate.wordCount;
-        if (wordCount > 3) score += 0.2;
-        else if (wordCount > 2) score += 0.1;
-        
-        // Content score (episodes often have descriptive words)
-        const text = candidate.text.toLowerCase();
-        const descriptiveWords = ['the', 'and', 'how', 'why', 'what', 'when', 'where', 'with', 'from', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below'];
-        const hasDescriptiveWords = descriptiveWords.some(word => text.includes(word));
-        if (hasDescriptiveWords) score += 0.1;
-        
-        // Known podcast names score (these are likely podcasts, not episodes)
-        const knownPodcastNames = ['marketplace', 'serial', 'radiolab', 'freakonomics', 'planet money', 'this american life', 'npr', 'bbc', 'cnn'];
-        if (knownPodcastNames.includes(text)) {
-          score -= 0.3; // Penalize known podcast names
-        }
-        
-        // Truncation score (episodes are often truncated)
-        if (this.isPotentiallyTruncated(candidate.text)) score += 0.1;
-        
-        return score;
-      };
-      
-      const score1 = getEpisodeScore(candidate1);
-      const score2 = getEpisodeScore(candidate2);
-      
-      logger.info(`Episode scoring: "${candidate1.text}" = ${score1}, "${candidate2.text}" = ${score2}`);
-      
-      // Assign based on episode scores
-      if (score1 > score2) {
-        episodeTitle = candidate1.text.trim();
-        podcastTitle = candidate2.text.trim();
-        logger.info(`Assigned episode: "${episodeTitle}", podcast: "${podcastTitle}" (score-based)`);
-      } else {
-        episodeTitle = candidate2.text.trim();
-        podcastTitle = candidate1.text.trim();
-        logger.info(`Assigned episode: "${episodeTitle}", podcast: "${podcastTitle}" (score-based)`);
-      }
+      logger.info(`Position-based assignment: episode="${episodeTitle}" (Y=${sortedByPosition[0].avgY}), podcast="${podcastTitle}" (Y=${sortedByPosition[1].avgY})`);
     } else if (allCandidates.length === 1) {
       // Only one candidate - assume it's the episode
       episodeTitle = allCandidates[0].text.trim();
@@ -660,15 +608,41 @@ class VisionService {
     // NEW: Fallback validation if initial validation failed or has low confidence
     if (!validationResult.validated || validationResult.confidence < 0.6) {
       logger.info(`Initial validation failed or low confidence (${validationResult.confidence}), trying fallback validation...`);
-      const fallbackResult = await this.tryFallbackValidation(podcastTitle, episodeTitle, allCandidates);
       
-      if (fallbackResult.podcastTitle) {
-        podcastTitle = fallbackResult.podcastTitle;
-        logger.info(`Using fallback validated podcast title: "${podcastTitle}"`);
-      }
-      if (fallbackResult.episodeTitle) {
-        episodeTitle = fallbackResult.episodeTitle;
-        logger.info(`Using fallback validated episode title: "${episodeTitle}"`);
+      // NEW: Try swapping episode and podcast titles first
+      if (episodeTitle && podcastTitle) {
+        logger.info(`Trying swapped validation: episode="${podcastTitle}", podcast="${episodeTitle}"`);
+        const swappedValidation = await applePodcastsService.validatePodcastInfo(episodeTitle, podcastTitle);
+        
+        if (swappedValidation.validated && swappedValidation.confidence >= 0.6) {
+          logger.info(`Swapped validation succeeded! Using swapped titles.`);
+          podcastTitle = swappedValidation.validatedPodcast?.title || episodeTitle;
+          episodeTitle = swappedValidation.validatedEpisode?.title || podcastTitle;
+        } else {
+          logger.info(`Swapped validation failed, trying comprehensive fallback...`);
+          const fallbackResult = await this.tryFallbackValidation(podcastTitle, episodeTitle, allCandidates);
+          
+          if (fallbackResult.podcastTitle) {
+            podcastTitle = fallbackResult.podcastTitle;
+            logger.info(`Using fallback validated podcast title: "${podcastTitle}"`);
+          }
+          if (fallbackResult.episodeTitle) {
+            episodeTitle = fallbackResult.episodeTitle;
+            logger.info(`Using fallback validated episode title: "${episodeTitle}"`);
+          }
+        }
+      } else {
+        // No swapping possible, go directly to comprehensive fallback
+        const fallbackResult = await this.tryFallbackValidation(podcastTitle, episodeTitle, allCandidates);
+        
+        if (fallbackResult.podcastTitle) {
+          podcastTitle = fallbackResult.podcastTitle;
+          logger.info(`Using fallback validated podcast title: "${podcastTitle}"`);
+        }
+        if (fallbackResult.episodeTitle) {
+          episodeTitle = fallbackResult.episodeTitle;
+          logger.info(`Using fallback validated episode title: "${episodeTitle}"`);
+        }
       }
     }
 
