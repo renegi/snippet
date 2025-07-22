@@ -165,7 +165,7 @@ class ApplePodcastsService {
       }
 
       const searchTerm = encodeURIComponent(episodeTitle);
-      const url = `${this.baseUrl}/lookup?id=${podcastId}&entity=podcastEpisode&limit=50`;
+      const url = `${this.baseUrl}/lookup?id=${podcastId}&entity=podcastEpisode&limit=200`;
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -182,9 +182,9 @@ class ApplePodcastsService {
       // Find the best match with improved logic for truncated titles
       const bestMatch = this.findBestMatch(episodeTitle, results);
       
-      // NEW: Lower threshold for episode validation to handle truncated titles
+      // NEW: Much lower threshold for episode validation to handle truncated titles
       // Also check for substring matches which are common with truncated episode titles
-      const threshold = 0.4; // Lowered from 0.6
+      const threshold = 0.2; // Lowered from 0.4 to handle more truncated titles
       
       if (bestMatch && bestMatch.similarity > threshold) {
         return {
@@ -219,7 +219,7 @@ class ApplePodcastsService {
         return { episodes: [] };
       }
 
-      const url = `${this.baseUrl}/lookup?id=${podcastId}&entity=podcastEpisode&limit=50`;
+      const url = `${this.baseUrl}/lookup?id=${podcastId}&entity=podcastEpisode&limit=200`;
       logger.info(`Fetching episodes from: ${url}`);
 
       const response = await fetch(url);
@@ -322,10 +322,10 @@ class ApplePodcastsService {
       for (const word2 of words2) {
         if (word1 === word2) {
           exactWordMatches++;
-        } else if (word1.length >= 3 && word2.length >= 3) {
+        } else if (word1.length >= 2 && word2.length >= 2) { // Lowered from 3 to catch more truncated words
           // Check for partial word matches (e.g., "Hidden" matches "Hidden Brain")
           if (word1.startsWith(word2) || word2.startsWith(word1)) {
-            partialWordMatches += 0.5; // Partial match gets half credit
+            partialWordMatches += 0.6; // Increased from 0.5 for better partial matching
           }
         }
       }
@@ -341,7 +341,12 @@ class ApplePodcastsService {
     
     // NEW: Boost score for partial matches when we have some exact matches
     if (exactWordMatches > 0 && partialWordMatches > 0) {
-      return Math.min(1, wordSimilarity + 0.1); // Small boost for mixed matches
+      return Math.min(1, wordSimilarity + 0.15); // Increased boost for mixed matches
+    }
+    
+    // NEW: Additional boost for cases where we have good partial matches even without exact matches
+    if (partialWordMatches > 0 && partialWordMatches >= words1.length * 0.5) {
+      return Math.min(1, wordSimilarity + 0.1); // Boost for good partial match coverage
     }
     
     return wordSimilarity;

@@ -172,14 +172,7 @@ class VisionService {
         return false;
       }
       
-      // Filter by horizontal position - much more lenient
-      if (line.avgX && Math.abs(line.avgX - centerX) < albumArtRegion) {
-        // Only exclude very large text in center (likely album art)
-        if (line.avgArea > 5000) { // Much higher threshold (was 2000)
-          logger.info(`📱 Mobile Debug: Filtered out "${line.text}" - center album art (area:${line.avgArea})`);
-        return false;
-        }
-      }
+      // REMOVED: Album art filtering logic - no longer excluding center text
       
       // Extra filtering for very large text in upper areas - much more lenient
       if (line.avgY < excludeTopThreshold * 1.5 && line.avgArea > 8000) { // Much higher threshold (was 2000)
@@ -675,7 +668,7 @@ class VisionService {
             bottom: candidate2,
             distance: distance
           });
-        } else {
+          } else {
           // Since we're sorted by Y, if this distance is too large, 
           // all subsequent pairs with candidate1 will also be too large
           break;
@@ -773,7 +766,8 @@ class VisionService {
   async fuzzySearchEpisode(validatedPodcast, episodeText) {
     try {
       // Get all episodes for this podcast
-      const allEpisodes = await applePodcastsService.searchEpisodes(validatedPodcast.id, null);
+      const episodesResult = await applePodcastsService.searchEpisodes(validatedPodcast.id, null);
+      const allEpisodes = episodesResult.episodes || [];
       
       if (!allEpisodes || allEpisodes.length === 0) {
         return { success: false };
@@ -782,39 +776,66 @@ class VisionService {
       // Extract keywords from the episode candidate text
       const keywords = this.extractKeywords(episodeText);
       
+      logger.info(`Extracted keywords from "${episodeText}": [${keywords.join(', ')}]`);
+      
       if (keywords.length === 0) {
+        logger.info(`No keywords extracted from "${episodeText}"`);
         return { success: false };
       }
       
-      logger.info(`Fuzzy searching with keywords: [${keywords.join(', ')}]`);
+      logger.info(`Fuzzy searching with keywords: [${keywords.join(', ')}] among ${allEpisodes.length} episodes`);
       
-      // Find episodes that match multiple keywords
+      // Debug: Log first few episode titles to see what we're working with
+      if (allEpisodes.length > 0) {
+        const sampleTitles = allEpisodes.slice(0, 5).map(ep => ep.trackName);
+        logger.info(`Sample episode titles: [${sampleTitles.join(', ')}]`);
+      }
+      
+      // Find episodes that match multiple keywords with improved fuzzy matching
       const matchingEpisodes = allEpisodes.map(episode => {
         const episodeTitle = episode.trackName.toLowerCase();
-        const matchedKeywords = keywords.filter(keyword => episodeTitle.includes(keyword));
-        const matchScore = matchedKeywords.length / keywords.length;
         
-          return {
+        // Check for exact keyword matches
+        const exactMatches = keywords.filter(keyword => episodeTitle.includes(keyword));
+        
+        // Check for partial word matches (for truncated text)
+        const partialMatches = keywords.filter(keyword => {
+          const words = episodeTitle.split(/\s+/);
+          return words.some(word => word.startsWith(keyword) || keyword.startsWith(word));
+        });
+        
+        // Combine exact and partial matches, giving partial matches half weight
+        const totalMatches = exactMatches.length + (partialMatches.length * 0.5);
+        const matchScore = totalMatches / keywords.length;
+        
+        return {
           episode,
-          matchedKeywords,
-          matchScore
+          matchedKeywords: [...exactMatches, ...partialMatches.filter(k => !exactMatches.includes(k))],
+          matchScore,
+          exactMatches: exactMatches.length,
+          partialMatches: partialMatches.length
         };
-      }).filter(result => result.matchScore >= 0.4) // At least 40% of keywords must match
+      }).filter(result => result.matchScore >= 0.3) // Lowered threshold to 30% for better matching
         .sort((a, b) => b.matchScore - a.matchScore); // Best matches first
+      
+      logger.info(`Found ${matchingEpisodes.length} episodes with match score >= 0.3`);
       
       if (matchingEpisodes.length > 0) {
         const bestMatch = matchingEpisodes[0];
-        logger.info(`Best fuzzy match: "${bestMatch.episode.trackName}" (score: ${bestMatch.matchScore}, keywords: [${bestMatch.matchedKeywords.join(', ')}])`);
+        logger.info(`Best fuzzy match: "${bestMatch.episode.trackName}" (score: ${bestMatch.matchScore}, exact: ${bestMatch.exactMatches}, partial: ${bestMatch.partialMatches}, keywords: [${bestMatch.matchedKeywords.join(', ')}])`);
         
     return {
           success: true,
           episodeTitle: bestMatch.episode.trackName,
-          confidence: 0.6 + (bestMatch.matchScore * 0.2), // 0.6-0.8 confidence range
+          confidence: 0.5 + (bestMatch.matchScore * 0.3), // 0.5-0.8 confidence range
           matchScore: bestMatch.matchScore,
-          matchedKeywords: bestMatch.matchedKeywords
+          matchedKeywords: bestMatch.matchedKeywords,
+          exactMatches: bestMatch.exactMatches,
+          partialMatches: bestMatch.partialMatches
         };
       }
       
+      logger.info(`No episodes found with match score >= 0.3 for keywords: [${keywords.join(', ')}]`);
       return { success: false };
       
     } catch (error) {
@@ -828,7 +849,8 @@ class VisionService {
     
     try {
       // Get episodes for this podcast
-      const allEpisodes = await applePodcastsService.searchEpisodes(validatedPodcast.id, null);
+      const episodesResult = await applePodcastsService.searchEpisodes(validatedPodcast.id, null);
+      const allEpisodes = episodesResult.episodes || [];
       
       // Ensure allEpisodes is an array
       if (!Array.isArray(allEpisodes)) {
@@ -880,13 +902,39 @@ class VisionService {
   }
 
   extractKeywords(text) {
-    return text.toLowerCase()
+    // Clean and normalize text
+    const cleanedText = text.toLowerCase()
       .replace(/[^\w\s]/g, ' ')
-      .split(/\s+/)
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    // Split into words and filter
+    const words = cleanedText.split(/\s+/)
       .filter(word => 
-        word.length >= 3 && 
-        !['the', 'and', 'for', 'with', 'that', 'this', 'but', 'not', 'you', 'are', 'was', 'were', 'been', 'have', 'has', 'had', 'will', 'would', 'could', 'should'].includes(word)
+        word.length >= 2 && // Lowered from 3 to catch more truncated words
+        !['the', 'and', 'for', 'with', 'that', 'this', 'but', 'not', 'you', 'are', 'was', 'were', 'been', 'have', 'has', 'had', 'will', 'would', 'could', 'should', 'from', 'into', 'during', 'including', 'until', 'against', 'among', 'throughout', 'despite', 'towards', 'upon', 'concerning', 'to', 'of', 'in', 'on', 'at', 'by', 'for', 'since', 'ago', 'before', 'after', 'during', 'within', 'without', 'under', 'over', 'above', 'below', 'between', 'among', 'behind', 'in', 'front', 'of', 'next', 'to', 'near', 'far', 'from', 'away', 'from', 'out', 'of', 'off', 'on', 'onto', 'into', 'out', 'of', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'can', 'will', 'just', 'don', 'should', 'now', 'd', 'll', 'm', 'o', 're', 've', 'y', 'ain', 'aren', 'couldn', 'didn', 'doesn', 'hadn', 'hasn', 'haven', 'isn', 'ma', 'mightn', 'mustn', 'needn', 'shan', 'shouldn', 'wasn', 'weren', 'won', 'wouldn'].includes(word)
       );
+    
+    // Prioritize longer words and unique words
+    const wordCounts = {};
+    words.forEach(word => {
+      wordCounts[word] = (wordCounts[word] || 0) + 1;
+    });
+    
+    // Sort by length (longer words first) and uniqueness (unique words first)
+    return words
+      .sort((a, b) => {
+        const aCount = wordCounts[a];
+        const bCount = wordCounts[b];
+        
+        // If one is unique and the other isn't, prioritize unique
+        if (aCount === 1 && bCount > 1) return -1;
+        if (bCount === 1 && aCount > 1) return 1;
+        
+        // Otherwise, prioritize longer words
+        return b.length - a.length;
+      })
+      .slice(0, 8); // Limit to top 8 keywords to avoid noise
   }
 
   extractTimestamp(fullText) {
