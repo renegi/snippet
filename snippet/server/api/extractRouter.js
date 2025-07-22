@@ -50,11 +50,11 @@ router.post('/', upload.array('screenshots', 5), async (req, res, next) => {
         
         logger.info(`📱 Mobile Debug: File ${i + 1} processed successfully`, {
           processingTime: `${endTime - startTime}ms`,
-          podcastTitle: podcastInfo.firstPass?.podcastTitle || podcastInfo.secondPass?.podcastTitle,
-          episodeTitle: podcastInfo.firstPass?.episodeTitle || podcastInfo.secondPass?.episodeTitle,
-          timestamp: podcastInfo.firstPass?.timestamp || podcastInfo.secondPass?.timestamp,
+          podcastTitle: podcastInfo.podcastTitle || podcastInfo.firstPass?.podcastTitle || podcastInfo.secondPass?.podcastTitle,
+          episodeTitle: podcastInfo.episodeTitle || podcastInfo.firstPass?.episodeTitle || podcastInfo.secondPass?.episodeTitle,
+          timestamp: podcastInfo.timestamp || podcastInfo.firstPass?.timestamp || podcastInfo.secondPass?.timestamp,
           validated: podcastInfo.validation?.validated,
-          player: podcastInfo.firstPass?.player || podcastInfo.secondPass?.player
+          player: podcastInfo.player || podcastInfo.firstPass?.player || podcastInfo.secondPass?.player
         });
         
       results.push(podcastInfo);

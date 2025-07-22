@@ -205,7 +205,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
       
       console.log(`🔄 Processing episode ${index + 1}/${podcastInfo.data.length}`);
       
-      if (info.validation?.validated && info.secondPass?.timestamp) {
+      if (info.validation?.validated && (info.timestamp || info.secondPass?.timestamp || info.firstPass?.timestamp)) {
         try {
           const transcriptResult = await handleGetTranscript(info, index, convertedTimeRange);
           
@@ -220,6 +220,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
             const episodeData = {
               transcript: transcriptResult.text,
               episodeTitle: transcriptResult.episode?.title || 
+                           info.episodeTitle ||
                            info.validation?.validatedEpisode?.title || 
                            info.secondPass?.episodeTitle || 
                            `Episode ${index + 1}`,
@@ -229,10 +230,11 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
                              info.validation?.validatedPodcast?.artworkUrl ||
                              info.validation?.validatedPodcast?.artworkUrl600 ||
                              info.validation?.validatedPodcast?.artworkUrl100,
-              originalTimestamp: info.secondPass?.timestamp || info.firstPass?.timestamp || '0:00',
+              originalTimestamp: info.timestamp || info.secondPass?.timestamp || info.firstPass?.timestamp || '0:00',
               selectedRange: selectedTimeRange,
               // Add the missing data for copy functionality
               podcastName: transcriptResult.podcast?.title || 
+                          info.podcastTitle ||
                           info.validation?.validatedPodcast?.title,
               podcastId: transcriptResult.podcast?.id || 
                         info.validation?.validatedPodcast?.id,
@@ -256,6 +258,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
       } else {
         console.warn(`⚠️ Episode ${index} skipped - validation failed or missing timestamp:`, {
           validated: info.validation?.validated,
+          hasDirectTimestamp: !!info.timestamp,
           hasSecondPassTimestamp: !!info.secondPass?.timestamp,
           hasFirstPassTimestamp: !!info.firstPass?.timestamp
         });
@@ -282,15 +285,15 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     // More lenient validation - require at least basic episode info
     const hasBasicInfo = (
       info.validation?.validatedPodcast?.id && 
-      (info.validation?.validatedEpisode?.title || info.secondPass?.episodeTitle || info.firstPass?.episodeTitle) &&
-      (info.secondPass?.timestamp || info.firstPass?.timestamp)
+      (info.episodeTitle || info.validation?.validatedEpisode?.title || info.secondPass?.episodeTitle || info.firstPass?.episodeTitle) &&
+      (info.timestamp || info.secondPass?.timestamp || info.firstPass?.timestamp)
     );
 
     if (!hasBasicInfo) {
       console.error(`❌ Missing required information for transcript (episode ${index}):`, {
         podcastId: info.validation?.validatedPodcast?.id,
-        episodeTitle: info.validation?.validatedEpisode?.title || info.secondPass?.episodeTitle || info.firstPass?.episodeTitle,
-        timestamp: info.secondPass?.timestamp || info.firstPass?.timestamp
+        episodeTitle: info.episodeTitle || info.validation?.validatedEpisode?.title || info.secondPass?.episodeTitle || info.firstPass?.episodeTitle,
+        timestamp: info.timestamp || info.secondPass?.timestamp || info.firstPass?.timestamp
       });
       return null;
     }
@@ -324,11 +327,13 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     // Only show ghost loading for new episodes being added (index >= processedEpisodeCount) and only during initial processing (not transcript generation)
     shouldShowGhostLoading: isProcessing && !isGettingTranscript && index >= processedEpisodeCount,
     podcastInfo: podcastInfo?.data?.[index] ? {
-      episodeTitle: podcastInfo.data[index].validation?.validatedEpisode?.title || 
+      episodeTitle: podcastInfo.data[index].episodeTitle ||
+                   podcastInfo.data[index].validation?.validatedEpisode?.title || 
                    podcastInfo.data[index].secondPass?.episodeTitle || 
                    podcastInfo.data[index].firstPass?.episodeTitle ||
                    `Episode ${index + 1}`,
-      timestamp: podcastInfo.data[index].secondPass?.timestamp || 
+      timestamp: podcastInfo.data[index].timestamp ||
+                podcastInfo.data[index].secondPass?.timestamp || 
                 podcastInfo.data[index].firstPass?.timestamp ||
                 '0:00',
       podcastArtwork: podcastInfo.data[index].validation?.validatedPodcast?.artworkUrl || 

@@ -102,10 +102,7 @@ class ApplePodcastsService {
       const data = await response.json();
       const results = data.results || [];
 
-      logger.info(`Apple Podcasts search returned ${results.length} results for "${podcastTitle}":`);
-      results.forEach((result, index) => {
-        logger.info(`  ${index + 1}. "${result.collectionName}" by ${result.artistName} (similarity: ${this.calculateSimilarity(podcastTitle, result.collectionName).toFixed(3)})`);
-      });
+      logger.info(`Apple Podcasts search returned ${results.length} results for "${podcastTitle}"`);
 
       if (results.length === 0) {
         logger.info(`No results found for "${podcastTitle}"`);
@@ -220,7 +217,6 @@ class ApplePodcastsService {
       }
 
       const url = `${this.baseUrl}/lookup?id=${podcastId}&entity=podcastEpisode&limit=200`;
-      logger.info(`Fetching episodes from: ${url}`);
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -247,7 +243,6 @@ class ApplePodcastsService {
       }
 
       // If no episodeTitle, return all episodes
-      logger.info(`Returning all ${results.length} episodes`);
       return { episodes: results };
 
     } catch (error) {
@@ -269,12 +264,13 @@ class ApplePodcastsService {
       const title = result.collectionName || result.trackName || '';
       const similarity = this.calculateSimilarity(searchTerm, title);
       
-      logger.info(`  Comparing "${searchTerm}" with "${title}" → similarity: ${similarity.toFixed(3)}`);
-      
       if (similarity > bestSimilarity) {
         bestSimilarity = similarity;
         bestMatch = { result, similarity };
-        logger.info(`  → New best match: "${title}" (similarity: ${similarity.toFixed(3)})`);
+        // Only log when we find a new best match, and only if similarity is significant
+        if (similarity > 0.1) {
+          logger.info(`  → New best match: "${title}" (similarity: ${similarity.toFixed(3)})`);
+        }
       }
     }
 
@@ -287,7 +283,9 @@ class ApplePodcastsService {
       logger.info(`  → Using first result as fallback: "${title}" (similarity: 0.000)`);
     }
 
-    logger.info(`Final best match: ${bestMatch ? `"${bestMatch.result.collectionName || bestMatch.result.trackName}" (similarity: ${bestMatch.similarity.toFixed(3)})` : 'none'}`);
+    if (bestMatch && bestMatch.similarity > 0.1) {
+      logger.info(`Final best match: "${bestMatch.result.collectionName || bestMatch.result.trackName}" (similarity: ${bestMatch.similarity.toFixed(3)})`);
+    }
     return bestMatch;
   }
 
