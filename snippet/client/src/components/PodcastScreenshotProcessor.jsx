@@ -210,15 +210,15 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           const transcriptResult = await handleGetTranscript(info, index, convertedTimeRange);
           
           // Add each transcript to the episodes array with proper data mapping
-          if (transcriptResult && transcriptResult.text) {
+          if (transcriptResult && (transcriptResult.transcript || transcriptResult.text)) {
             console.log(`✅ Successfully got transcript for episode ${index}:`, {
               episodeTitle: transcriptResult.episode?.title || info.validation?.validatedEpisode?.title,
-              textLength: transcriptResult.text.length,
+              textLength: (transcriptResult.transcript || transcriptResult.text).length,
               hasWords: !!transcriptResult.words
             });
 
             const episodeData = {
-              transcript: transcriptResult.text,
+              transcript: transcriptResult.transcript || transcriptResult.text,
               episodeTitle: transcriptResult.episode?.title || 
                            info.episodeTitle ||
                            info.validation?.validatedEpisode?.title || 
@@ -307,11 +307,11 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
       // Store transcript by index (for the classic UI)
       setTranscripts(prev => ({
         ...prev,
-        [index]: transcriptResult.data
+        [index]: transcriptResult
       }));
       
       // Return the transcript data (for the new UI)
-      return transcriptResult.data;
+      return transcriptResult;
     } catch (error) {
       console.error(`❌ Error getting transcript for episode ${index}:`, error);
       return null;
