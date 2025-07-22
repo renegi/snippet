@@ -31,9 +31,9 @@ const ScreenshotEditModal = ({
       
       const podcast = screenshotData.validation?.validatedPodcast || null;
       const episode = screenshotData.validation?.validatedEpisode || null;
-      const timestamp = screenshotData.secondPass?.timestamp || screenshotData.firstPass?.timestamp || '';
-      const podcastTitle = screenshotData.secondPass?.podcastTitle || screenshotData.firstPass?.podcastTitle || '';
-      const episodeTitle = screenshotData.secondPass?.episodeTitle || screenshotData.firstPass?.episodeTitle || '';
+      const timestamp = screenshotData.timestamp || screenshotData.secondPass?.timestamp || screenshotData.firstPass?.timestamp || '';
+      const podcastTitle = screenshotData.podcastTitle || screenshotData.secondPass?.podcastTitle || screenshotData.firstPass?.podcastTitle || '';
+      const episodeTitle = screenshotData.episodeTitle || screenshotData.secondPass?.episodeTitle || screenshotData.firstPass?.episodeTitle || '';
       
       console.log('Setting form data:', { podcast, episode, timestamp, podcastTitle, episodeTitle });
       
@@ -189,7 +189,6 @@ const ScreenshotEditModal = ({
     timestampCandidates.push(screenshotData.timestamp);
   }
 
-  console.log('ScreenshotEditModal render:', { isOpen, screenshotData: !!screenshotData });
   if (!isOpen) return null;
 
   return (
@@ -262,7 +261,7 @@ const ScreenshotEditModal = ({
               
               {/* Podcast Dropdown */}
               {showPodcastDropdown && podcastOptions.length > 0 && (
-                <div className="absolute z-10 w-full mt-2 bg-white border border-[#DDDAD1] rounded-[16px] shadow-lg max-h-60 overflow-auto">
+                <div className="absolute z-10 w-full mt-2 bg-white border border-[#DDDAD1] rounded-[16px] shadow-lg max-h-60 overflow-auto" style={{ width: '100%', maxWidth: '100%' }}>
                   {podcastOptions.map((podcast) => (
                     <button
                       key={podcast.id}
@@ -276,9 +275,9 @@ const ScreenshotEditModal = ({
                           className="w-10 h-10 rounded-[12px] object-cover"
                         />
                       )}
-                      <div>
-                        <div className="font-medium text-[#1B1B1B] font-['Termina']">{podcast.title}</div>
-                        <div className="text-sm text-gray-500 font-['Termina']">{podcast.artistName}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-[#1B1B1B] font-['Termina'] truncate">{podcast.title}</div>
+                        <div className="text-sm text-gray-500 font-['Termina'] truncate">{podcast.artistName}</div>
                       </div>
                     </button>
                   ))}
@@ -311,7 +310,7 @@ const ScreenshotEditModal = ({
               
               {/* Episode Dropdown */}
               {showEpisodeDropdown && episodeOptions.length > 0 && (
-                <div className="absolute z-10 w-full mt-2 bg-white border border-[#DDDAD1] rounded-[16px] shadow-lg max-h-60 overflow-auto">
+                <div className="absolute z-10 w-full mt-2 bg-white border border-[#DDDAD1] rounded-[16px] shadow-lg max-h-60 overflow-auto" style={{ width: '100%', maxWidth: '100%' }}>
                   {episodeOptions.map((episode) => (
                     <button
                       key={episode.id}
@@ -325,9 +324,9 @@ const ScreenshotEditModal = ({
                           className="w-10 h-10 rounded-[12px] object-cover"
                         />
                       )}
-                      <div>
-                        <div className="font-medium text-[#1B1B1B] font-['Termina']">{episode.title}</div>
-                        <div className="text-sm text-gray-500 font-['Termina']">{episode.releaseDate}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-[#1B1B1B] font-['Termina'] truncate">{episode.title}</div>
+                        <div className="text-sm text-gray-500 font-['Termina'] truncate">{episode.releaseDate}</div>
                       </div>
                     </button>
                   ))}

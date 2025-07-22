@@ -398,6 +398,8 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           ...screenshotData.secondPass,
           podcastTitle: updatedData.podcast.title
         };
+        // Also update root level for UI consistency
+        screenshotData.podcastTitle = updatedData.podcast.title;
         console.log('Updated podcast:', updatedData.podcast.title);
       }
       
@@ -410,6 +412,8 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           ...screenshotData.secondPass,
           episodeTitle: updatedData.episode.title
         };
+        // Also update root level for UI consistency
+        screenshotData.episodeTitle = updatedData.episode.title;
         console.log('Updated episode:', updatedData.episode.title);
       }
       
@@ -418,6 +422,8 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           ...screenshotData.secondPass,
           timestamp: updatedData.timestamp
         };
+        // Also update root level for UI consistency
+        screenshotData.timestamp = updatedData.timestamp;
         console.log('Updated timestamp:', updatedData.timestamp);
       }
       
