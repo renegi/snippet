@@ -123,7 +123,7 @@ const MainContent = ({
   const handleTouchStart = (e, handle) => {
     // Only prevent default if we're actually going to handle the touch
     if (e.target.closest('[data-drag-handle]')) {
-      e.preventDefault();
+    e.preventDefault();
     }
     setIsDragging(true);
     setDragHandle(handle);
@@ -334,7 +334,7 @@ const MainContent = ({
         {/* Edge-to-edge divider line */}
         <div className="absolute top-0 left-0 right-0 h-px bg-[#dddad1]"></div>
         <div className="w-full max-w-[361px] flex flex-col items-start justify-start gap-4">
-                      <div className="self-stretch flex flex-col items-start justify-start gap-[5px]">
+          <div className="self-stretch flex flex-col items-start justify-start gap-[5px]">
               <div className="w-full flex flex-row items-center justify-between gap-0">
               <button
                 onClick={() => adjustTime(-15, 'left')}

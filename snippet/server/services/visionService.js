@@ -4,62 +4,12 @@ const applePodcastsService = require('./applePodcastsService');
 
 class VisionService {
   constructor() {
-    // Handle different authentication methods for different environments
-    let clientConfig = {};
-    
-    if (process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64) {
-      // For Render: decode base64 credentials
-      try {
-        const credentials = JSON.parse(
-          Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64, 'base64').toString()
-        );
-        clientConfig = {
-          credentials: credentials,
-          projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || credentials.project_id
-        };
-      } catch (error) {
-        console.error('Error parsing base64 credentials:', error);
-        throw error;
-      }
-    } else if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
-      // Alternative: individual credential fields
-      clientConfig = {
-        credentials: {
-          client_email: process.env.GOOGLE_CLIENT_EMAIL,
-          private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-          type: 'service_account'
-        },
-        projectId: process.env.GOOGLE_CLOUD_PROJECT_ID
-      };
-    } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-      // For local development: use file path
-      clientConfig = {
-        keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-        projectId: process.env.GOOGLE_CLOUD_PROJECT_ID
-      };
-    } else {
-      throw new Error('No valid Google Cloud credentials found. Please set GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY, or GOOGLE_APPLICATION_CREDENTIALS_BASE64');
-    }
-    
-    this.client = new vision.ImageAnnotatorClient(clientConfig);
+    this.client = new vision.ImageAnnotatorClient();
   }
 
   async extractText(imagePath) {
     try {
-      logger.info('📱 Mobile Debug: Starting Vision API text detection', {
-        imagePath,
-        fileExists: require('fs').existsSync(imagePath)
-      });
-      
-      // Add timeout for large mobile images
-      const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Vision API timeout - image too large or processing taking too long')), 30000)
-      );
-      
-      const visionCall = this.client.textDetection(imagePath);
-      const [result] = await Promise.race([visionCall, timeout]);
-      
-      logger.info('📱 Mobile Debug: Vision API call completed successfully');
+      const [result] = await this.client.textDetection(imagePath);
       const detections = result.textAnnotations;
       
       if (!detections || detections.length === 0) {
@@ -78,25 +28,10 @@ class VisionService {
         const y = vertices[0].y;
         logger.info(`${index}: "${detection.description}" at Y=${y}`);
       });
-      
-      // NEW: Check if "Search Engine" is in the full text
-      if (fullText.toLowerCase().includes('search engine')) {
-        logger.info('✅ "Search Engine" found in full OCR text!');
-      } else {
-        logger.info('❌ "Search Engine" NOT found in full OCR text');
-      }
-      
-      // NEW: Check if "Audacy" is in the full text
-      if (fullText.toLowerCase().includes('audacy')) {
-        logger.info('✅ "Audacy" found in full OCR text!');
-      } else {
-        logger.info('❌ "Audacy" NOT found in full OCR text');
-      }
-      
       logger.info('=== END DEBUG ===');
       
       // Extract podcast information using positioning data
-      const podcastInfo = await this.parsePodcastInfoWithPositioning(detections, fullText);
+      const podcastInfo = this.parsePodcastInfoWithPositioning(detections, fullText);
       
       // Store original OCR results (first pass)
       const originalOCR = {
@@ -133,18 +68,6 @@ class VisionService {
           
           // Get all potential title candidates from debug info
           const allCandidates = podcastInfo.debug?.titleCandidates || [];
-          
-          // NEW: Debug what candidates are being passed to fallback
-          logger.info('=== CANDIDATES FOR FALLBACK VALIDATION ===');
-          allCandidates.forEach((candidate, index) => {
-            logger.info(`Candidate ${index}: "${candidate.text}" (Y=${candidate.avgY}, area=${candidate.avgArea}, words=${candidate.wordCount})`);
-            
-            // Check for problematic candidates
-            if (candidate.text.toLowerCase().includes('75') || candidate.text.toLowerCase().includes('de carga')) {
-              logger.info(`⚠️  PROBLEMATIC CANDIDATE: "${candidate.text}" - This should not be in candidates!`);
-            }
-          });
-          
           const fallbackResult = await this.tryFallbackValidation(
             podcastInfo.podcastTitle,
             podcastInfo.episodeTitle,
@@ -177,23 +100,8 @@ class VisionService {
       
       return podcastInfo;
     } catch (error) {
-      logger.error('📱 Mobile Debug: Error in Vision API:', {
-        error: error.message,
-        code: error.code,
-        stack: error.stack,
-        imagePath
-      });
-      
-      // Provide more specific error messages
-      if (error.message.includes('timeout')) {
-        throw new Error('Image processing timed out - try a smaller image or crop the screenshot');
-      } else if (error.message.includes('QUOTA_EXCEEDED')) {
-        throw new Error('Google Vision API quota exceeded - please try again later');
-      } else if (error.message.includes('INVALID_IMAGE')) {
-        throw new Error('Invalid image format - please use PNG, JPG, or WebP');
-      } else {
-        throw new Error(`Vision API error: ${error.message}`);
-      }
+      logger.error('Error in Vision API:', error);
+      throw error;
     }
   }
 
@@ -286,7 +194,7 @@ class VisionService {
     };
   }
 
-  async parsePodcastInfoWithPositioning(textAnnotations, fullText) {
+  parsePodcastInfoWithPositioning(textAnnotations, fullText) {
     // Skip the first annotation as it contains the full text
     const individualTexts = textAnnotations.slice(1);
 
@@ -326,93 +234,40 @@ class VisionService {
       return { text, avgY, avgX, avgArea, wordCount: sortedWords.length };
     });
 
-    // DEBUG: Log all detected lines for troubleshooting
-    logger.info('=== ALL DETECTED LINES ===');
-    joinedLines.forEach((line, index) => {
-      logger.info(`Line ${index}: "${line.text}" (Y=${line.avgY}, X=${line.avgX}, area=${line.avgArea}, words=${line.wordCount})`);
-      
-      // NEW: Check for problematic text
-      if (line.text.toLowerCase().includes('75') || line.text.toLowerCase().includes('de carga')) {
-        logger.info(`⚠️  PROBLEMATIC TEXT DETECTED: "${line.text}" - This should be filtered out!`);
-      }
-    });
-    
-    // CORRECT: Focus on the middle section (50%-87.5%) to avoid UI elements
-    let bottomThreshold = maxY * (5 / 10); // Start at 50% (avoid status bar and battery info)
-    let topThreshold = maxY * (7 / 8); // End at 87.5% (avoid bottom controls)
-    let bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
-    
-    logger.info(`Primary detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
-    
-    // NEW: Debug which lines are being filtered out by detection area
-    logger.info('=== DETECTION AREA FILTERING ===');
-    joinedLines.forEach((line, index) => {
-      const inRange = line.avgY >= bottomThreshold && line.avgY <= topThreshold;
-      logger.info(`Line ${index}: "${line.text}" (Y=${line.avgY}) - ${inRange ? '✅ IN RANGE' : '❌ OUT OF RANGE'}`);
-    });
-    
-    // If we don't find enough candidates, expand to 10%-87.5% as fallback
+    // Only consider lines in the bottom half of the image
+    let bottomThreshold = maxY * (1 / 2);
+    let bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold);
     if (bottomLines.length < 2) {
-      bottomThreshold = maxY * (1 / 10); // Start at 10% (include more content)
-      topThreshold = maxY * (7 / 8); // End at 87.5% (still avoid bottom controls)
-      bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
-      logger.info(`Fallback detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
+      bottomThreshold = maxY * (1 / 3);
+      bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold);
     }
 
-    // DEBUG: Log lines in detection area
-    logger.info('=== LINES IN DETECTION AREA ===');
-    logger.info(`bottomLines length: ${bottomLines.length}`);
-    bottomLines.forEach((line, index) => {
-      logger.info(`Detection area line ${index}: "${line.text}" (Y=${line.avgY}, X=${line.avgX}, area=${line.avgArea}, words=${line.wordCount})`);
-    });
-    
     // Filter for podcast/episode title candidates:
-    // 1. Must have multiple words (at least 2, or 1 in fallback mode)
+    // 1. Must have multiple words (at least 2)
     // 2. Must be reasonable length (3-50 chars)
     // 3. Must not be UI elements, dates, or times
     const titleCandidates = bottomLines.filter(line => {
-      // Track which detection area we're in for logging
-      const isFallbackArea = bottomThreshold <= maxY * (1 / 10); // If we're in the 10%-90% range
-      const isExpandedArea = bottomThreshold <= maxY * (2 / 5) && !isFallbackArea; // If we're in the 40%-90% range
       const description = line.text.toLowerCase().trim();
       
       // DEBUG: Log each line being considered
       logger.info(`Considering line: "${line.text}" (Y=${line.avgY}, wordCount=${line.wordCount}, length=${description.length})`);
       
-      // Must have multiple words (more lenient in fallback mode)
-      // Allow single words in fallback mode for podcast names
-      const minWords = isFallbackArea ? 1 : 2;
-      if (line.wordCount < minWords) {
-        logger.info(`  → FILTERED: Too few words (${line.wordCount}, minimum: ${minWords})`);
+      // Must have multiple words
+      if (line.wordCount < 2) {
+        logger.info(`  → FILTERED: Too few words (${line.wordCount})`);
         return false;
       }
       
-      // Reasonable length (more lenient in fallback mode)
-      const minLength = isFallbackArea ? 2 : 3; // Allow shorter text in fallback
-      const maxLength = isFallbackArea ? 60 : 50; // Allow longer text in fallback
-      if (description.length < minLength || description.length > maxLength) {
-        logger.info(`  → FILTERED: Bad length (${description.length}, allowed: ${minLength}-${maxLength})`);
+      // Reasonable length
+      if (description.length < 3 || description.length > 50) {
+        logger.info(`  → FILTERED: Bad length (${description.length})`);
         return false;
       }
       
-      // Filter out UI elements and system text
-      const uiElements = ['play', 'pause', 'stop', 'skip', 'forward', 'backward', 'volume', 'airplay', 'output'];
+      // Filter out UI elements
+      const uiElements = ['play', 'pause', 'stop', 'skip', 'forward', 'backward', 'volume'];
       if (uiElements.some(element => description.includes(element))) {
         logger.info(`  → FILTERED: UI element detected`);
-        return false;
-      }
-      
-      // Filter out battery and system status text
-      const systemText = ['%', 'de carga', 'battery', 'wifi', 'signal', 'spectrum', 'lock', 'unlock'];
-      if (systemText.some(text => description.includes(text))) {
-        logger.info(`  → FILTERED: System text detected (matched: ${systemText.find(text => description.includes(text))})`);
-        return false;
-      }
-      
-      // Filter out time patterns that are not timestamps
-      if (description.match(/^\d{1,2}:\d{2}$/) && !description.match(/^\d{1,2}:\d{2}:\d{2}$/)) {
-        // This is likely a clock time, not a podcast timestamp
-        logger.info(`  → FILTERED: Clock time detected`);
         return false;
       }
       
@@ -440,19 +295,6 @@ class VisionService {
         return false;
       }
       
-      // Filter out advertisement indicators (less strict in fallback mode)
-      const adKeywords = [
-        'ad', 'advertisement', 'sponsored', 'promoted', 'best of', 'cheating stories',
-        'reddit', 'rslash', 'true stories', 'stories from', 'stories 2025'
-      ];
-      const hasAdKeyword = adKeywords.some(keyword => description.includes(keyword));
-      
-      // In fallback mode, only filter out obvious ads, not potential podcast names
-      if (hasAdKeyword) {
-        logger.info(`  → FILTERED: Advertisement keyword detected`);
-        return false;
-      }
-      
       // Filter out navigation/menu items - BUT allow "Search Engine" as it's a valid podcast name
       const navigationKeywords = [
         'home', 'library', 'browse', 'discover', 'settings',
@@ -476,7 +318,6 @@ class VisionService {
       }
       
       // Filter out very generic or short phrases that are unlikely to be titles
-      // BUT be more lenient in fallback mode for podcast names
       if (description.length < 8 && !description.match(/\b(with|and|of|the|in|on|at|by)\b/)) {
         logger.info(`  → FILTERED: Too short and no connecting words`);
         return false; // Too short and no connecting words typical of titles
@@ -485,19 +326,6 @@ class VisionService {
       logger.info(`  → KEPT: Candidate accepted`);
       return true;
     });
-
-    // NEW: Debug what was filtered out
-    logger.info('=== TITLE CANDIDATE FILTERING SUMMARY ===');
-    bottomLines.forEach((line, index) => {
-      const wasKept = titleCandidates.some(candidate => candidate.text === line.text);
-      logger.info(`Line "${line.text}" - ${wasKept ? '✅ KEPT' : '❌ FILTERED OUT'}`);
-    });
-    
-    // NEW: Debug the candidates arrays
-    logger.info(`cleanedCandidates length: ${cleanedCandidates.length}`);
-    logger.info(`additionalCandidates length: ${additionalCandidates.length}`);
-    logger.info(`allCandidates length: ${allCandidates.length}`);
-    logger.info(`allCandidates contents: ${allCandidates.map(c => `"${c.text}"`).join(', ')}`);
 
     // DEBUG: Log title candidates
     logger.info('Title candidates:', JSON.stringify(titleCandidates, null, 2));
@@ -590,9 +418,16 @@ class VisionService {
     // NEW: Look for standalone podcast names that might be separated from episode titles
     const podcastNameCandidates = bottomLines.filter(line => {
       const text = line.text.toLowerCase().trim();
-      // Look for podcast names that might be standalone
+      // Look for common podcast names that might be standalone
       return (
+        text === 'marketplace' ||
+        text === 'serial' ||
+        text === 'radiolab' ||
+        text === 'freakonomics' ||
+        text === 'planet money' ||
         text.includes('search engine') ||
+        text.includes('where should we begin') ||
+        text.includes('esther') ||
         this.looksLikePodcastName(line.text)
       );
     });
@@ -611,11 +446,50 @@ class VisionService {
       }
     });
     
+    // Look for "Where Should We Begin" variations in the original lines
+    const whereBeginVariations = bottomLines.filter(line => 
+      line.text.toLowerCase().includes('where') && line.text.toLowerCase().includes('begin')
+    );
+    
+    whereBeginVariations.forEach(variation => {
+      // Create a clean "Where Should We Begin?" variation
+      if (!cleanedCandidates.some(c => c.text.toLowerCase().includes('where should we begin'))) {
+        additionalCandidates.push({
+          text: 'Where Should We Begin?',
+          avgY: variation.avgY,
+          avgX: variation.avgX,
+          avgArea: variation.avgArea,
+          wordCount: 4,
+          source: 'reconstructed_from_fragments'
+        });
+      }
+    });
+    
+    // Look for Esther Perel related content
+    const estherLines = bottomLines.filter(line => 
+      line.text.toLowerCase().includes('esther')
+    );
+    
+    estherLines.forEach(line => {
+      // Clean up Esther-related content
+      let cleanEsther = line.text.trim();
+      if (cleanEsther.toLowerCase().includes('calling') && cleanEsther.toLowerCase().includes('never')) {
+        cleanEsther = cleanEsther.replace(/Bee\b/gi, 'Been');
+        if (!cleanedCandidates.some(c => c.text === cleanEsther)) {
+          additionalCandidates.push({
+            text: cleanEsther,
+            avgY: line.avgY,
+            avgX: line.avgX,
+            avgArea: line.avgArea,
+            wordCount: line.wordCount,
+            source: 'esther_content_cleaned'
+          });
+        }
+      }
+    });
+    
     // Combine original candidates with additional ones
     const allCandidates = [...cleanedCandidates, ...additionalCandidates];
-    
-    // REMOVED: Special case for "Search Engine" as it was picking up album art text
-    // We'll rely on the normal detection area and filtering logic instead
     
     // DEBUG: Log all candidates including additional ones
     logger.info('All candidates (including additional):', JSON.stringify(allCandidates, null, 2));
@@ -623,117 +497,35 @@ class VisionService {
     // Sort by vertical position (top to bottom)
     allCandidates.sort((a, b) => a.avgY - b.avgY);
 
-    // Find episode and podcast titles based on position only:
-    // 1. Episode is above podcast (Y position)
-    // 2. Simple and reliable approach
+    // Find episode and podcast titles based on your rules:
+    // 1. Episode is above podcast
+    // 2. Episode has larger font (avgArea)
+    // 3. Both should be multi-word strings
     let episodeTitle = null;
     let podcastTitle = null;
 
     if (allCandidates.length >= 2) {
-      // Sort candidates by Y position (top to bottom)
-      const sortedByPosition = [...allCandidates].sort((a, b) => a.avgY - b.avgY);
+      // Take the two largest candidates by area (font size)
+      const sortedByArea = [...allCandidates].sort((a, b) => b.avgArea - a.avgArea);
+      const candidate1 = sortedByArea[0]; // Largest (should be episode)
+      const candidate2 = sortedByArea[1]; // Second largest (should be podcast)
       
-      // Simple assignment: episode is above podcast
-      episodeTitle = sortedByPosition[0].text.trim();
-      podcastTitle = sortedByPosition[1].text.trim();
-      
-      logger.info(`Position-based assignment: episode="${episodeTitle}" (Y=${sortedByPosition[0].avgY}), podcast="${podcastTitle}" (Y=${sortedByPosition[1].avgY})`);
+      // Assign based on position: episode should be above podcast
+      if (candidate1.avgY < candidate2.avgY) {
+        // candidate1 is above candidate2 - correct order
+        episodeTitle = candidate1.text.trim();
+        podcastTitle = candidate2.text.trim();
+      } else {
+        // candidate2 is above candidate1 - swap
+        episodeTitle = candidate2.text.trim();
+        podcastTitle = candidate1.text.trim();
+      }
     } else if (allCandidates.length === 1) {
       // Only one candidate - assume it's the episode
       episodeTitle = allCandidates[0].text.trim();
-      logger.info(`Single candidate assigned as episode: "${episodeTitle}"`);
     }
 
-    // NEW: Validate titles immediately after identification
-    logger.info('=== TITLE VALIDATION START ===');
-    logger.info(`Detected candidates: ${allCandidates.map(c => `"${c.text}" (Y=${c.avgY}, area=${c.avgArea}, words=${c.wordCount})`).join(', ')}`);
-    logger.info(`Assigned episode: "${episodeTitle}"`);
-    logger.info(`Assigned podcast: "${podcastTitle}"`);
-    
-    // NEW: Run timestamp detection and title validation in parallel
-    logger.info('Running timestamp detection and title validation in parallel...');
-    
-    const [timestamp, validationResult] = await Promise.all([
-      this.extractTimestamp(individualTexts, fullText),
-      applePodcastsService.validatePodcastInfo(podcastTitle, episodeTitle)
-    ]);
-    
-    logger.info(`Validation result:`, {
-      validated: validationResult.validated,
-      confidence: validationResult.confidence,
-      validatedPodcast: validationResult.validatedPodcast?.title,
-      validatedEpisode: validationResult.validatedEpisode?.title
-    });
-    
-    // Use validated titles if available, otherwise keep original
-    if (validationResult.validatedPodcast) {
-      podcastTitle = validationResult.validatedPodcast.title;
-      logger.info(`Using validated podcast title: "${podcastTitle}"`);
-    }
-    if (validationResult.validatedEpisode) {
-      episodeTitle = validationResult.validatedEpisode.title;
-      logger.info(`Using validated episode title: "${episodeTitle}"`);
-    }
-
-    // NEW: Fallback validation if initial validation failed or has low confidence
-    if (!validationResult.validated || validationResult.confidence < 0.6) {
-      logger.info(`Initial validation failed or low confidence (${validationResult.confidence}), trying fallback validation...`);
-      
-      // NEW: Try swapping episode and podcast titles first
-      if (episodeTitle && podcastTitle) {
-        logger.info(`Trying swapped validation: episode="${podcastTitle}", podcast="${episodeTitle}"`);
-        const swappedValidation = await applePodcastsService.validatePodcastInfo(episodeTitle, podcastTitle);
-        
-        if (swappedValidation.validated && swappedValidation.confidence >= 0.6) {
-          logger.info(`Swapped validation succeeded! Using swapped titles.`);
-          podcastTitle = swappedValidation.validatedPodcast?.title || episodeTitle;
-          episodeTitle = swappedValidation.validatedEpisode?.title || podcastTitle;
-        } else {
-          logger.info(`Swapped validation failed, trying comprehensive fallback...`);
-          const fallbackResult = await this.tryFallbackValidation(podcastTitle, episodeTitle, allCandidates);
-          
-          if (fallbackResult.podcastTitle) {
-            podcastTitle = fallbackResult.podcastTitle;
-            logger.info(`Using fallback validated podcast title: "${podcastTitle}"`);
-          }
-          if (fallbackResult.episodeTitle) {
-            episodeTitle = fallbackResult.episodeTitle;
-            logger.info(`Using fallback validated episode title: "${episodeTitle}"`);
-          }
-        }
-      } else {
-        // No swapping possible, go directly to comprehensive fallback
-        const fallbackResult = await this.tryFallbackValidation(podcastTitle, episodeTitle, allCandidates);
-        
-        if (fallbackResult.podcastTitle) {
-          podcastTitle = fallbackResult.podcastTitle;
-          logger.info(`Using fallback validated podcast title: "${podcastTitle}"`);
-        }
-        if (fallbackResult.episodeTitle) {
-          episodeTitle = fallbackResult.episodeTitle;
-          logger.info(`Using fallback validated episode title: "${episodeTitle}"`);
-        }
-      }
-    }
-
-    // Return final result with parallel-processed data
-    return {
-      podcastTitle,
-      episodeTitle,
-      timestamp,
-      player: 'unknown',
-      debug: {
-        titleCandidates: allCandidates,
-        timestampMethod: timestamp ? 'context_filtered' : 'not_found'
-      }
-    };
-  }
-
-  // NEW: Extract timestamp detection into separate function for parallel execution
-  extractTimestamp(individualTexts, fullText) {
-    logger.info('=== TIMESTAMP DETECTION START ===');
-    
-    // Extract timestamp using improved logic with size-based filtering
+    // Extract timestamp using improved logic
     const timeRegex = /(-?\d{1,2}:\d{2}(?::\d{2})?)/g;
     const allTimes = [...fullText.matchAll(timeRegex)].map(m => m[0]);
     const positiveTimes = allTimes.filter(t => !t.startsWith('-'));
@@ -742,62 +534,13 @@ class VisionService {
     logger.info('All detected times:', allTimes);
     logger.info('Positive times:', positiveTimes);
     
-    // Find the text annotations that contain each time to get their size information
-    const timeWithSize = positiveTimes.map(time => {
-      // Find the text annotation that contains this time
-      const timeAnnotation = individualTexts.find(annotation => 
-        annotation.description === time
-      );
-      
-      if (timeAnnotation) {
-        const vertices = timeAnnotation.boundingPoly.vertices;
-        const width = Math.abs(vertices[1].x - vertices[0].x);
-        const height = Math.abs(vertices[2].y - vertices[0].y);
-        const area = width * height;
-        const y = vertices[0].y;
-        
-        return {
-          time,
-          area,
-          width,
-          height,
-          y,
-          annotation: timeAnnotation
-        };
-      }
-      
-      return null;
-    }).filter(Boolean);
-    
-    logger.info('Times with size information:', timeWithSize.map(t => ({
-      time: t.time,
-      area: t.area,
-      width: t.width,
-      height: t.height,
-      y: t.y
-    })));
-    
-    // Calculate median area to determine what's "large" vs "small"
-    const areas = timeWithSize.map(t => t.area).sort((a, b) => a - b);
-    const medianArea = areas[Math.floor(areas.length / 2)];
-    const largeTextThreshold = medianArea * 2; // Text 2x larger than median is considered "large"
-    
-    logger.info(`Median area: ${medianArea}, Large text threshold: ${largeTextThreshold}`);
-    
-    const podcastTimes = timeWithSize.filter(timeInfo => {
-      const { time, area, y } = timeInfo;
+    const podcastTimes = positiveTimes.filter(time => {
       const timeIndex = fullText.indexOf(time);
       const contextBefore = fullText.substring(Math.max(0, timeIndex - 20), timeIndex);
       const contextAfter = fullText.substring(timeIndex + time.length, timeIndex + time.length + 20);
       const fullContext = contextBefore + contextAfter;
       
-      logger.info(`Checking time "${time}" (area: ${area}, y: ${y}) with context: "${fullContext}"`);
-      
-      // NEW: Size-based filtering - prefer smaller text (more likely to be player timestamps)
-      if (area > largeTextThreshold) {
-        logger.info(`  → FILTERED: Text too large (area: ${area} > threshold: ${largeTextThreshold})`);
-        return false;
-      }
+      logger.info(`Checking time "${time}" with context: "${fullContext}"`);
       
       // Date filter
       if (fullContext.match(/june|junio|january|february|march|april|may|june|july|august|september|october|november|december|ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic/i)) {
@@ -828,43 +571,46 @@ class VisionService {
       return true;
     });
     
-    // Sort by area (smallest first) to prefer smaller text
-    podcastTimes.sort((a, b) => a.area - b.area);
-    
-    logger.info('Filtered podcast times (sorted by size):', podcastTimes.map(t => ({
-      time: t.time,
-      area: t.area,
-      y: t.y
-    })));
-    
-    const timestamp = podcastTimes.length > 0 ? podcastTimes[0].time : null;
+    logger.info('Filtered podcast times:', podcastTimes);
+    const timestamp = podcastTimes.length > 0 ? podcastTimes[0] : null;
     
     // NEW: If no timestamp found, add fallback search for standalone times
     if (!timestamp) {
       logger.info('No timestamp found via context filtering, trying fallback approach...');
       
-      // Look for any time patterns in the text, prioritizing smaller text
-      const fallbackTimes = timeWithSize.filter(timeInfo => {
-        const { time, area } = timeInfo;
-        // Accept any reasonable time format, but still apply size filtering
-        const isValidFormat = time.match(/^\d{1,2}:\d{2}(?::\d{2})?$/);
-        const isNotTooLarge = area <= largeTextThreshold * 1.5; // Slightly more lenient for fallback
-        
-        logger.info(`Fallback checking "${time}" (area: ${area}, valid: ${isValidFormat}, notTooLarge: ${isNotTooLarge})`);
-        return isValidFormat && isNotTooLarge;
+      // Look for any time patterns in the text, prioritizing those near player controls
+      const allPossibleTimes = positiveTimes.filter(time => {
+        // Accept any reasonable time format
+        return time.match(/^\d{1,2}:\d{2}(?::\d{2})?$/);
       });
       
-      if (fallbackTimes.length > 0) {
-        // Sort by area (smallest first) and take the smallest
-        fallbackTimes.sort((a, b) => a.area - b.area);
-        const fallbackTime = fallbackTimes[0].time;
-        logger.info(`Using fallback timestamp: ${fallbackTime} (area: ${fallbackTimes[0].area})`);
-        return fallbackTime;
+      if (allPossibleTimes.length > 0) {
+        // Take the first reasonable time as fallback
+        const fallbackTime = allPossibleTimes[0];
+        logger.info(`Using fallback timestamp: ${fallbackTime}`);
+        return {
+          podcastTitle,
+          episodeTitle,
+          timestamp: fallbackTime,
+          player: 'unknown',
+          debug: {
+            titleCandidates: allCandidates,
+            timestampMethod: 'fallback'
+          }
+        };
       }
     }
-    
-    logger.info(`Final timestamp: ${timestamp}`);
-    return timestamp;
+
+    return {
+      podcastTitle,
+      episodeTitle,
+      timestamp,
+      player: 'unknown',
+      debug: {
+        titleCandidates: allCandidates,
+        timestampMethod: timestamp ? 'context_filtered' : 'not_found'
+      }
+    };
   }
 
   async tryFallbackValidation(podcastTitle, episodeTitle, candidates) {
@@ -921,49 +667,6 @@ class VisionService {
     // This is much more aggressive than the previous approach
     if (primaryLooksLikeSystem || !podcastTitle || !episodeTitle) {
       logger.info('ENHANCED PRIORITY: Testing all candidates as podcast names (primary detection failed or looks like system text)...');
-      
-      // NEW: First, try to validate the suspected episode title if we have one
-      if (episodeTitle && !isSystemText(episodeTitle)) {
-        logger.info(`PRIORITY: Testing suspected episode title first: "${episodeTitle}"`);
-        
-        // Try to find a podcast that has this episode
-        for (const candidate of candidates) {
-          if (candidate.text !== episodeTitle && !isSystemText(candidate.text)) {
-            try {
-              logger.info(`Testing suspected episode + podcast candidate: "${episodeTitle}" + "${candidate.text}"`);
-              const episodeFirstValidation = await applePodcastsService.validatePodcastInfo(candidate.text, episodeTitle);
-              
-              // Lower confidence threshold when system text is detected
-              const confidenceThreshold = primaryLooksLikeSystem ? 0.6 : 0.7;
-              const episodeThreshold = primaryLooksLikeSystem ? 0.25 : 0.3;
-              
-              if (episodeFirstValidation.validated && 
-                  episodeFirstValidation.validatedPodcast?.confidence >= confidenceThreshold &&
-                  episodeFirstValidation.validatedEpisode?.confidence >= episodeThreshold) {
-                logger.info(`HIGH CONFIDENCE episode-first match found!`);
-                return {
-                  success: true,
-                  validatedPodcast: episodeFirstValidation.validatedPodcast.title,
-                  validatedEpisode: episodeFirstValidation.validatedEpisode.title,
-                  validation: episodeFirstValidation,
-                  fallbackSource: `episode_first_validation: ${episodeTitle} + ${candidate.text}`
-                };
-              }
-            } catch (error) {
-              logger.error(`Error testing episode-first validation:`, error);
-            }
-          }
-        }
-        
-        // If episode-first approach failed, try searching for the episode across all podcasts
-        logger.info(`Episode-first approach failed, trying episode search across all podcasts...`);
-        try {
-          // This would require a broader search API call - for now, we'll continue with the existing approach
-          logger.info(`Episode search not implemented, continuing with candidate testing...`);
-        } catch (error) {
-          logger.error(`Error in episode search:`, error);
-        }
-      }
       
       // Enhanced candidate sorting with better podcast detection
       const sortedCandidates = [...candidates].sort((a, b) => {
@@ -1043,7 +746,7 @@ class VisionService {
             logger.info(`High-confidence podcast found, searching for episodes via enhanced keyword search...`);
             try {
               const allEpisodes = await applePodcastsService.searchEpisodes(podcastOnlyValidation.validatedPodcast.id, null);
-              logger.info(`Retrieved ${allEpisodes.episodes?.length || 0} episodes for keyword matching`);
+              logger.info(`Retrieved ${allEpisodes.length} episodes for keyword matching`);
               
               // Try to match episode candidates with actual episodes using enhanced keywords
               for (const episodeCandidate of otherCandidates) {
@@ -1057,7 +760,7 @@ class VisionService {
                   );
                 
                 if (keywords.length > 0) {
-                  const keywordMatches = (allEpisodes.episodes || []).filter(episode => {
+                  const keywordMatches = allEpisodes.filter(episode => {
                     const episodeTitle = episode.trackName.toLowerCase();
                     const matchCount = keywords.filter(keyword => episodeTitle.includes(keyword)).length;
                     return matchCount >= Math.min(2, keywords.length); // Require at least 2 keywords or all keywords if less than 2
@@ -1129,10 +832,10 @@ class VisionService {
       try {
         logger.info(`Searching for episodes matching: "${candidate.text}"`);
         const episodeSearchResults = await applePodcastsService.searchEpisodes(null, candidate.text);
-        logger.info(`Episode search returned ${episodeSearchResults.episodes?.length || 0} results`);
+        logger.info(`Episode search returned ${episodeSearchResults.length} results`);
         
-        if (episodeSearchResults.episodes && episodeSearchResults.episodes.length > 0) {
-          const bestMatch = episodeSearchResults.episodes[0];
+        if (episodeSearchResults.length > 0) {
+          const bestMatch = episodeSearchResults[0];
           logger.info(`Found episode "${bestMatch.trackName}" in podcast "${bestMatch.collectionName}"`);
           
           // Check if any other candidates match the podcast name
@@ -1268,29 +971,6 @@ class VisionService {
     // Create a list of all possible combinations to try
     const combinations = [];
     
-    // Helper function to check if text looks like a valid episode title
-    const isValidEpisodeCandidate = (text) => {
-      const description = text.toLowerCase().trim();
-      
-      // Filter out system text and UI elements
-      const systemText = ['%', 'de carga', 'battery', 'wifi', 'signal', 'spectrum', 'lock', 'unlock', 'play', 'pause', 'stop', 'skip', 'forward', 'backward', 'volume', 'airplay', 'output'];
-      if (systemText.some(sysText => description.includes(sysText))) {
-        return false;
-      }
-      
-      // Filter out clock times
-      if (description.match(/^\d{1,2}:\d{2}$/) && !description.match(/^\d{1,2}:\d{2}:\d{2}$/)) {
-        return false;
-      }
-      
-      // Must have reasonable length for an episode title
-      if (description.length < 3 || description.length > 100) {
-        return false;
-      }
-      
-      return true;
-    };
-    
     // 1. Try swapping the original podcast and episode titles
     if (podcastTitle && episodeTitle) {
       combinations.push({
@@ -1313,18 +993,15 @@ class VisionService {
       });
     }
     
-    // 3. Try each candidate as episode title with the original podcast (only if valid)
+    // 3. Try each candidate as episode title with the original podcast
     if (podcastTitle) {
       candidates.forEach(candidate => {
-        if (candidate.text !== podcastTitle && candidate.text !== episodeTitle && isValidEpisodeCandidate(candidate.text)) {
-          logger.info(`Testing "${candidate.text}" as episode candidate (passed validation)`);
+        if (candidate.text !== podcastTitle && candidate.text !== episodeTitle) {
           combinations.push({
             podcast: podcastTitle,
             episode: candidate.text,
             source: `candidate_as_episode: ${candidate.text}`
           });
-        } else if (candidate.text !== podcastTitle && candidate.text !== episodeTitle) {
-          logger.info(`Skipping "${candidate.text}" as episode candidate (failed validation)`);
         }
       });
     }
@@ -1400,117 +1077,36 @@ class VisionService {
       return 0;
     });
     
-    // NEW: Systematic validation approach
-    // 1. First, identify the podcast with high confidence
-    // 2. Then systematically test episode candidates against that podcast
-    
-    logger.info('=== SYSTEMATIC VALIDATION APPROACH ===');
-    
-    // Step 1: Find the best podcast candidate
-    let bestPodcast = null;
-    let bestPodcastConfidence = 0;
-    
+    // Try each combination and return the first one that validates with decent confidence
     for (const combo of combinations) {
-      if (!combo.podcast) continue;
-      
       try {
-        logger.info(`Testing podcast candidate: "${combo.podcast}"`);
-        const podcastValidation = await applePodcastsService.validatePodcastInfo(combo.podcast, null);
+        logger.info(`Trying combination: podcast="${combo.podcast}", episode="${combo.episode}" (${combo.source})`);
         
-        if (podcastValidation.validated && podcastValidation.validatedPodcast?.confidence > bestPodcastConfidence) {
-          bestPodcast = podcastValidation.validatedPodcast;
-          bestPodcastConfidence = podcastValidation.validatedPodcast.confidence;
-          logger.info(`New best podcast: "${bestPodcast.title}" (confidence: ${bestPodcastConfidence})`);
-        }
-      } catch (error) {
-        logger.error(`Error testing podcast candidate "${combo.podcast}":`, error);
-      }
-    }
-    
-    if (!bestPodcast || bestPodcastConfidence < 0.7) {
-      logger.info('No high-confidence podcast found, falling back to original approach');
-      
-      // Fall back to original approach for low-confidence cases
-      for (const combo of combinations) {
-        try {
-          logger.info(`Trying combination: podcast="${combo.podcast}", episode="${combo.episode}" (${combo.source})`);
-          
-          const validation = await applePodcastsService.validatePodcastInfo(
-            combo.podcast,
-            combo.episode
-          );
-          
-          // Accept if confidence is >= 0.6 (lower threshold for fallback)
-          if (validation.validated && validation.confidence >= 0.6) {
-            logger.info(`Fallback validation successful with confidence ${validation.confidence}: ${combo.source}`);
-            return {
-              success: true,
-              validatedPodcast: validation.validatedPodcast.title,
-              validatedEpisode: validation.validatedEpisode?.title || combo.episode,
-              validation: validation,
-              fallbackSource: combo.source
-            };
-          }
-        } catch (error) {
-          logger.error(`Error trying fallback combination ${combo.source}:`, error);
-        }
-      }
-      
-      logger.info('No successful fallback validation found');
-      return { success: false };
-    }
-    
-    // Step 2: Now systematically test episode candidates against the identified podcast
-    logger.info(`Systematically testing episode candidates against podcast: "${bestPodcast.title}"`);
-    
-    // Get all valid episode candidates
-    const validEpisodeCandidates = candidates
-      .filter(c => isValidEpisodeCandidate(c.text))
-      .map(c => c.text);
-    
-    logger.info(`Valid episode candidates: ${validEpisodeCandidates.join(', ')}`);
-    
-    // Test each episode candidate
-    for (const episodeCandidate of validEpisodeCandidates) {
-      try {
-        logger.info(`Testing episode candidate: "${episodeCandidate}" against podcast "${bestPodcast.title}"`);
-        
-        const episodeValidation = await applePodcastsService.validatePodcastInfo(
-          bestPodcast.title,
-          episodeCandidate
+        const validation = await applePodcastsService.validatePodcastInfo(
+          combo.podcast,
+          combo.episode
         );
         
-        if (episodeValidation.validated && episodeValidation.validatedEpisode?.confidence >= 0.4) {
-          logger.info(`✅ Episode validation successful: "${episodeCandidate}" → "${episodeValidation.validatedEpisode.title}"`);
+        // Accept if confidence is >= 0.6 (lower threshold for fallback)
+        if (validation.validated && validation.confidence >= 0.6) {
+          logger.info(`Fallback validation successful with confidence ${validation.confidence}: ${combo.source}`);
           return {
             success: true,
-            validatedPodcast: bestPodcast.title,
-            validatedEpisode: episodeValidation.validatedEpisode.title,
-            validation: episodeValidation,
-            fallbackSource: `systematic_validation: ${bestPodcast.title} + ${episodeCandidate}`
+            validatedPodcast: validation.validatedPodcast.title,
+            validatedEpisode: validation.validatedEpisode?.title || combo.episode,
+            validation: validation,
+            fallbackSource: combo.source
           };
-        } else {
-          logger.info(`❌ Episode validation failed: "${episodeCandidate}" (confidence: ${episodeValidation.validatedEpisode?.confidence || 0})`);
+        } else if (validation.confidence >= 0.5) {
+          // Store as a potential match but keep trying for better ones
+          logger.info(`Potential fallback match with confidence ${validation.confidence}: ${combo.source}`);
         }
+        
       } catch (error) {
-        logger.error(`Error testing episode candidate "${episodeCandidate}":`, error);
+        logger.error(`Error trying fallback combination ${combo.source}:`, error);
+        // Continue to next combination
       }
     }
-    
-    // If no episode validation succeeded, return just the podcast
-    logger.info(`No episode validation succeeded, returning podcast-only result: "${bestPodcast.title}"`);
-    return {
-      success: true,
-      validatedPodcast: bestPodcast.title,
-      validatedEpisode: 'Unknown Episode',
-      validation: {
-        validated: true,
-        confidence: bestPodcastConfidence,
-        validatedPodcast: bestPodcast,
-        validatedEpisode: null
-      },
-      fallbackSource: `systematic_validation_podcast_only: ${bestPodcast.title}`
-    };
     
     logger.info('No successful fallback validation found');
     return {
