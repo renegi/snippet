@@ -4,8 +4,44 @@ const applePodcastsService = require('./applePodcastsService');
 
 class VisionService {
   constructor() {
-    // Don't initialize the client in constructor - do it lazily when needed
-    this.client = null;
+    // Handle different authentication methods for different environments
+    let clientConfig = {};
+    
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64) {
+      // For Render: decode base64 credentials
+      try {
+        const credentials = JSON.parse(
+          Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64, 'base64').toString()
+        );
+        clientConfig = {
+          credentials: credentials,
+          projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || credentials.project_id
+        };
+      } catch (error) {
+        console.error('Error parsing base64 credentials:', error);
+        throw error;
+      }
+    } else if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+      // Alternative: individual credential fields
+      clientConfig = {
+        credentials: {
+          client_email: process.env.GOOGLE_CLIENT_EMAIL,
+          private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+          type: 'service_account'
+        },
+        projectId: process.env.GOOGLE_CLOUD_PROJECT_ID
+      };
+    } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      // For local development: use file path
+      clientConfig = {
+        keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        projectId: process.env.GOOGLE_CLOUD_PROJECT_ID
+      };
+    } else {
+      throw new Error('No valid Google Cloud credentials found. Please set GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY, or GOOGLE_APPLICATION_CREDENTIALS_BASE64');
+    }
+    
+    this.client = new vision.ImageAnnotatorClient(clientConfig);
     
     // Configuration thresholds
     this.config = {
@@ -19,19 +55,22 @@ class VisionService {
     };
   }
 
-  // Initialize the Vision client lazily
-  getClient() {
-    if (!this.client) {
-      this.client = new vision.ImageAnnotatorClient();
-      logger.info('Vision client initialized');
-    }
-    return this.client;
-  }
-
   async extractText(imagePath) {
     try {
-      const client = this.getClient();
-      const [result] = await client.textDetection(imagePath);
+      logger.info('📱 Mobile Debug: Starting Vision API text detection', {
+        imagePath,
+        fileExists: require('fs').existsSync(imagePath)
+      });
+      
+      // Add timeout for large mobile images
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Vision API timeout - image too large or processing taking too long')), 30000)
+      );
+      
+      const visionCall = this.client.textDetection(imagePath);
+      const [result] = await Promise.race([visionCall, timeout]);
+      
+      logger.info('📱 Mobile Debug: Vision API call completed successfully');
       const detections = result.textAnnotations;
       
       if (!detections || detections.length === 0) {
@@ -61,8 +100,23 @@ class VisionService {
         rawText: fullText
       };
     } catch (error) {
-      logger.error('Error in Vision API:', error);
-      throw error;
+      logger.error('📱 Mobile Debug: Error in Vision API:', {
+        error: error.message,
+        code: error.code,
+        stack: error.stack,
+        imagePath
+      });
+      
+      // Provide more specific error messages
+      if (error.message.includes('timeout')) {
+        throw new Error('Image processing timed out - try a smaller image or crop the screenshot');
+      } else if (error.message.includes('QUOTA_EXCEEDED')) {
+        throw new Error('Google Vision API quota exceeded - please try again later');
+      } else if (error.message.includes('INVALID_IMAGE')) {
+        throw new Error('Invalid image format - please use PNG, JPG, or WebP');
+      } else {
+        throw new Error(`Vision API error: ${error.message}`);
+      }
     }
   }
 

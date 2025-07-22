@@ -8,21 +8,6 @@ const extractRouter = require('./api/extractRouter');
 const transcriptRouter = require('./api/transcriptRouter');
 const logger = require('./utils/logger');
 
-// Google Cloud credentials setup for Render deployment
-if (process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64) {
-  try {
-    const credentialsPath = path.join(__dirname, 'google-credentials.json');
-    const credentials = Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64, 'base64').toString('utf8');
-    fs.writeFileSync(credentialsPath, credentials);
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = credentialsPath;
-    logger.info('Google Cloud credentials set up successfully');
-  } catch (error) {
-    logger.error('Error setting up Google Cloud credentials:', error);
-  }
-} else {
-  logger.warn('GOOGLE_APPLICATION_CREDENTIALS_BASE64 not found, using default credentials');
-}
-
 const app = express();
 const port = process.env.PORT || 3001;
 
