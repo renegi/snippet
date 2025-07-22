@@ -472,6 +472,18 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
             Look under the hood
           </button>
         </div>
+
+        {/* Screenshot Edit Modal */}
+        <ScreenshotEditModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          screenshotData={selectedScreenshotIndex !== null && podcastInfo?.data ? {
+            ...podcastInfo.data[selectedScreenshotIndex],
+            preview: previews[selectedScreenshotIndex]
+          } : null}
+          onUpdate={handleModalUpdate}
+          onDelete={handleModalDelete}
+        />
       </div>
     );
   }
