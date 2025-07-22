@@ -318,22 +318,7 @@ const MainContent = ({
             );
           })}
           
-          {/* Show placeholder if no screenshots */}
-          {screenshots.length === 0 && (
-            <div className="self-stretch flex flex-row items-center justify-start gap-2 opacity-50">
-              <div className="w-14 relative rounded-xl h-14 overflow-hidden shrink-0 bg-gray-200 flex items-center justify-center">
-                <span className="text-gray-400 text-xs">🎧</span>
-              </div>
-              <div className="w-[108px] flex flex-col items-start justify-start gap-1">
-                <b className="w-[142px] relative leading-[130%] inline-block text-gray-400">
-                  No screenshots yet
-                </b>
-                <div className="self-stretch relative text-xs leading-[130%] font-medium text-gray-400">
-                  Add screenshots to get started
-                </div>
-              </div>
-            </div>
-          )}
+
         </div>
       </div>
       

@@ -26,12 +26,16 @@ const ScreenshotEditModal = ({
 
   // Initialize form with existing data
   useEffect(() => {
-    if (screenshotData) {
+    if (isOpen && screenshotData) {
+      console.log('Initializing modal with data:', screenshotData);
+      
       const podcast = screenshotData.validation?.validatedPodcast || null;
       const episode = screenshotData.validation?.validatedEpisode || null;
       const timestamp = screenshotData.secondPass?.timestamp || screenshotData.firstPass?.timestamp || '';
       const podcastTitle = screenshotData.secondPass?.podcastTitle || screenshotData.firstPass?.podcastTitle || '';
       const episodeTitle = screenshotData.secondPass?.episodeTitle || screenshotData.firstPass?.episodeTitle || '';
+      
+      console.log('Setting form data:', { podcast, episode, timestamp, podcastTitle, episodeTitle });
       
       setSelectedPodcast(podcast);
       setSelectedEpisode(episode);
@@ -43,7 +47,7 @@ const ScreenshotEditModal = ({
       setShowPodcastDropdown(false);
       setShowEpisodeDropdown(false);
     }
-  }, [screenshotData]);
+  }, [isOpen, screenshotData]);
 
   // Search podcasts with debouncing
   useEffect(() => {
@@ -51,7 +55,8 @@ const ScreenshotEditModal = ({
       clearTimeout(podcastSearchTimeoutRef.current);
     }
 
-    if (podcastSearchTerm.length < 2) {
+    // Don't search if we're just setting initial values
+    if (podcastSearchTerm.length < 2 || !isOpen) {
       setPodcastOptions([]);
       setShowPodcastDropdown(false);
       return;
@@ -83,7 +88,7 @@ const ScreenshotEditModal = ({
         clearTimeout(podcastSearchTimeoutRef.current);
       }
     };
-  }, [podcastSearchTerm]);
+  }, [podcastSearchTerm, isOpen]);
 
   // Search episodes when podcast is selected
   useEffect(() => {
@@ -91,7 +96,8 @@ const ScreenshotEditModal = ({
       clearTimeout(episodeSearchTimeoutRef.current);
     }
 
-    if (!selectedPodcast || episodeSearchTerm.length < 2) {
+    // Don't search if we're just setting initial values
+    if (!selectedPodcast || episodeSearchTerm.length < 2 || !isOpen) {
       setEpisodeOptions([]);
       setShowEpisodeDropdown(false);
       return;
@@ -145,6 +151,12 @@ const ScreenshotEditModal = ({
   };
 
   const handleUpdate = () => {
+    console.log('handleUpdate called with:', {
+      podcast: selectedPodcast,
+      episode: selectedEpisode,
+      timestamp: selectedTimestamp
+    });
+    
     onUpdate({
       podcast: selectedPodcast,
       episode: selectedEpisode,
