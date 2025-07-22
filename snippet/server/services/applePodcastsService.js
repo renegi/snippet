@@ -37,9 +37,25 @@ class ApplePodcastsService {
       let validated = false;
 
       if (podcastResult?.validatedPodcast) {
-        confidence += 0.6;
-        validated = true;
-        logger.info(`Podcast validation SUCCESS: "${podcastTitle}" → "${podcastResult.validatedPodcast.title}" (confidence: ${podcastResult.validatedPodcast.confidence})`);
+        // NEW: Only validate podcast if it actually contains the episode
+        if (episodeTitle) {
+          if (episodeResult?.validatedEpisode) {
+            // Both podcast and episode found - high confidence
+            confidence += 0.6;
+            validated = true;
+            logger.info(`Podcast validation SUCCESS: "${podcastTitle}" → "${podcastResult.validatedPodcast.title}" (episode found: "${episodeTitle}" → "${episodeResult.validatedEpisode.title}")`);
+          } else {
+            // Podcast found but episode not found - this might be a platform name
+            logger.info(`Podcast validation FAILED: "${podcastTitle}" → "${podcastResult.validatedPodcast.title}" but episode "${episodeTitle}" not found in this podcast`);
+            // Don't validate the podcast if we can't find the episode
+            podcastResult.validatedPodcast = null;
+          }
+        } else {
+          // No episode title provided, just validate the podcast
+          confidence += 0.6;
+          validated = true;
+          logger.info(`Podcast validation SUCCESS: "${podcastTitle}" → "${podcastResult.validatedPodcast.title}" (no episode title provided)`);
+        }
       } else {
         logger.info(`Podcast validation FAILED: "${podcastTitle}" not found in Apple Podcasts`);
       }
@@ -47,8 +63,8 @@ class ApplePodcastsService {
       if (episodeResult?.validatedEpisode) {
         confidence += 0.4;
         logger.info(`Episode validation SUCCESS: "${episodeTitle}" → "${episodeResult.validatedEpisode.title}" (confidence: ${episodeResult.validatedEpisode.confidence})`);
-      } else if (episodeTitle) {
-        logger.info(`Episode validation FAILED: "${episodeTitle}" not found in podcast "${podcastResult?.validatedPodcast?.title}"`);
+      } else if (episodeTitle && podcastResult?.validatedPodcast) {
+        logger.info(`Episode validation FAILED: "${episodeTitle}" not found in podcast "${podcastResult.validatedPodcast.title}"`);
       }
 
       logger.info(`Final validation result: validated=${validated}, confidence=${confidence.toFixed(3)}`);
