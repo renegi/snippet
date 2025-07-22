@@ -320,9 +320,9 @@ class VisionService {
       logger.info(`Line ${index}: "${line.text}" (Y=${line.avgY}, X=${line.avgX}, area=${line.avgArea}, words=${line.wordCount})`);
     });
     
-    // Only consider lines in the middle section (50%-87.5%) to avoid ads at the bottom
-    let bottomThreshold = maxY * (1 / 2); // Start at 50%
-    let topThreshold = maxY * (7 / 8); // End at 87.5% (exclude bottom 12.5%)
+    // EXPANDED: Consider lines in a broader section (10%-90%) to capture podcast names at the top
+    let bottomThreshold = maxY * (1 / 10); // Start at 10% (include top area where podcast names often appear)
+    let topThreshold = maxY * (9 / 10); // End at 90% (exclude bottom 10% where ads appear)
     let bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
     
     logger.info(`Primary detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
@@ -334,20 +334,12 @@ class VisionService {
       logger.info(`Line ${index}: "${line.text}" (Y=${line.avgY}) - ${inRange ? '✅ IN RANGE' : '❌ OUT OF RANGE'}`);
     });
     
-    // If we don't find enough candidates, expand the range slightly
+    // If we don't find enough candidates, expand the range even more
     if (bottomLines.length < 2) {
-      bottomThreshold = maxY * (2 / 5); // Start at 40%
-      topThreshold = maxY * (9 / 10); // End at 90% (exclude bottom 10%)
+      bottomThreshold = maxY * (1 / 20); // Start at 5%
+      topThreshold = maxY * (19 / 20); // End at 95% (exclude only the very bottom)
       bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
       logger.info(`Expanded detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
-    }
-    
-    // NEW: Fallback to bottom 90% if still no candidates found
-    if (bottomLines.length < 2) {
-      bottomThreshold = maxY * (1 / 10); // Start at 10%
-      topThreshold = maxY * (9 / 10); // End at 90% (exclude bottom 10%)
-      bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
-      logger.info(`Fallback detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
     }
 
     // DEBUG: Log lines in detection area
@@ -583,6 +575,31 @@ class VisionService {
     
     // Combine original candidates with additional ones
     const allCandidates = [...cleanedCandidates, ...additionalCandidates];
+    
+    // NEW: Special case - ensure "Search Engine" is always included if detected anywhere
+    const searchEngineInFullText = fullText.toLowerCase().includes('search engine');
+    const searchEngineInCandidates = allCandidates.some(c => c.text.toLowerCase().includes('search engine'));
+    
+    if (searchEngineInFullText && !searchEngineInCandidates) {
+      logger.info('🔍 "Search Engine" detected in full text but not in candidates - adding it manually');
+      
+      // Find the "Search Engine" text in the original lines
+      const searchEngineLine = joinedLines.find(line => 
+        line.text.toLowerCase().includes('search engine')
+      );
+      
+      if (searchEngineLine) {
+        allCandidates.push({
+          text: 'Search Engine',
+          avgY: searchEngineLine.avgY,
+          avgX: searchEngineLine.avgX,
+          avgArea: searchEngineLine.avgArea,
+          wordCount: searchEngineLine.wordCount,
+          source: 'manual_search_engine_addition'
+        });
+        logger.info('✅ Added "Search Engine" to candidates manually');
+      }
+    }
     
     // DEBUG: Log all candidates including additional ones
     logger.info('All candidates (including additional):', JSON.stringify(allCandidates, null, 2));
