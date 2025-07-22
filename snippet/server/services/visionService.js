@@ -255,10 +255,19 @@ class VisionService {
     const text = line.text.toLowerCase().trim();
     const originalText = line.text.trim();
     
-    // Basic length and word count filters
+    // Basic length and word count filters - be more lenient for single words
     if (text.length < this.config.minCandidateLength || 
-        text.length > this.config.maxCandidateLength ||
-        line.wordCount < this.config.minWordCount) {
+        text.length > this.config.maxCandidateLength) {
+      return false;
+    }
+    
+    // For word count: allow single words if they're substantial (like podcast names)
+    if (line.wordCount < 1) {
+      return false;
+    }
+    
+    // If it's a single word, it should be substantial (not just a short word)
+    if (line.wordCount === 1 && text.length < 6) {
       return false;
     }
     
@@ -298,14 +307,21 @@ class VisionService {
       return false;
     }
     
-    // 7. Starts with lowercase (likely mid-sentence/truncated)
+    // 7. Starts with lowercase (likely mid-sentence/truncated) - BUT be more lenient
+    // Allow if it's substantial content (like truncated episode titles)
     if (/^[a-z]/.test(originalText)) {
-      return false;
+      // Allow if it's substantial content (longer than 10 chars or contains meaningful words)
+      if (text.length < 10 && !text.includes('market') && !text.includes('podcast') && !text.includes('episode')) {
+        return false;
+      }
     }
     
-    // 8. Contains ellipsis (truncated)
+    // 8. Contains ellipsis (truncated) - BUT don't filter out completely
     if (/\.{3,}|…/.test(text)) {
-      return false;
+      // Allow if it's substantial content
+      if (text.length < 15) {
+        return false;
+      }
     }
     
     // 9. Structural indicators of system text
