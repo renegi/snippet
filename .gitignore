@@ -125,6 +125,8 @@ keys/
 *.key
 *.p12
 *.pfx
+google-credentials.json
+snippet/server/google-credentials.json
 
 # Database files
 *.db
