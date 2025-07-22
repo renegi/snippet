@@ -4,7 +4,8 @@ const applePodcastsService = require('./applePodcastsService');
 
 class VisionService {
   constructor() {
-    this.client = new vision.ImageAnnotatorClient();
+    // Don't initialize the client in constructor - do it lazily when needed
+    this.client = null;
     
     // Configuration thresholds
     this.config = {
@@ -18,9 +19,19 @@ class VisionService {
     };
   }
 
+  // Initialize the Vision client lazily
+  getClient() {
+    if (!this.client) {
+      this.client = new vision.ImageAnnotatorClient();
+      logger.info('Vision client initialized');
+    }
+    return this.client;
+  }
+
   async extractText(imagePath) {
     try {
-      const [result] = await this.client.textDetection(imagePath);
+      const client = this.getClient();
+      const [result] = await client.textDetection(imagePath);
       const detections = result.textAnnotations;
       
       if (!detections || detections.length === 0) {
