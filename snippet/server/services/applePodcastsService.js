@@ -1,4 +1,5 @@
 const logger = require('../utils/logger');
+const xml2js = require('xml2js');
 
 class ApplePodcastsService {
   constructor() {
@@ -350,6 +351,112 @@ class ApplePodcastsService {
     }
     
     return wordSimilarity;
+  }
+
+  // Get detailed podcast information including RSS feed URL
+  async getPodcastDetails(podcastId) {
+    try {
+      const url = `${this.baseUrl}/lookup?id=${podcastId}`;
+      
+      logger.info(`Getting podcast details for ID: ${podcastId}`);
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const results = data.results || [];
+      
+      if (results.length === 0) {
+        logger.warn(`No podcast details found for ID: ${podcastId}`);
+        return null;
+      }
+
+      const podcast = results[0];
+      return {
+        id: podcast.collectionId,
+        title: podcast.collectionName,
+        artist: podcast.artistName,
+        feedUrl: podcast.feedUrl,
+        artworkUrl: podcast.artworkUrl600 || podcast.artworkUrl100,
+        description: podcast.description,
+        genres: podcast.genres
+      };
+    } catch (error) {
+      logger.error('Error getting podcast details:', error);
+      return null;
+    }
+  }
+
+  // Parse RSS feed to find episode audio URL
+  async getEpisodeAudioUrl(feedUrl, episodeTitle) {
+    try {
+      logger.info(`Parsing RSS feed for episode: "${episodeTitle}"`);
+      logger.info(`RSS feed URL: ${feedUrl}`);
+      
+      // Fetch RSS feed
+      const response = await fetch(feedUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const rssText = await response.text();
+      logger.info(`RSS feed fetched successfully, length: ${rssText.length} characters`);
+      
+      // Parse XML
+      const parser = new xml2js.Parser();
+      const result = await parser.parseStringPromise(rssText);
+      
+      if (!result.rss || !result.rss.channel || !result.rss.channel[0].item) {
+        logger.warn('Invalid RSS feed structure');
+        return null;
+      }
+
+      const episodes = result.rss.channel[0].item;
+      logger.info(`Found ${episodes.length} episodes in RSS feed`);
+      
+      // Find episode matching the title
+      const targetEpisode = episodes.find(episode => {
+        const title = episode.title && episode.title[0];
+        if (!title) return false;
+        
+        // Calculate similarity between episode titles
+        const similarity = this.calculateSimilarity(episodeTitle.toLowerCase(), title.toLowerCase());
+        logger.debug(`Episode similarity: "${title}" vs "${episodeTitle}" = ${similarity.toFixed(3)}`);
+        
+        return similarity > 0.7; // 70% similarity threshold
+      });
+
+      if (!targetEpisode) {
+        logger.warn(`No episode found matching "${episodeTitle}" in RSS feed`);
+        
+        // Log first few episode titles for debugging
+        const firstFew = episodes.slice(0, 5).map(ep => ep.title?.[0] || 'No title');
+        logger.info('First few episode titles:', firstFew);
+        
+        return null;
+      }
+
+      // Extract audio URL from enclosure
+      const enclosure = targetEpisode.enclosure && targetEpisode.enclosure[0];
+      if (!enclosure || !enclosure.$ || !enclosure.$.url) {
+        logger.warn('No audio enclosure found for episode');
+        return null;
+      }
+
+      const audioUrl = enclosure.$.url;
+      const audioType = enclosure.$.type || 'unknown';
+      const audioLength = enclosure.$.length || 'unknown';
+      
+      logger.info(`Found audio URL: ${audioUrl.substring(0, 100)}...`);
+      logger.info(`Audio type: ${audioType}, length: ${audioLength} bytes`);
+      
+      return audioUrl;
+    } catch (error) {
+      logger.error('Error parsing RSS feed:', error);
+      return null;
+    }
   }
 }
 
