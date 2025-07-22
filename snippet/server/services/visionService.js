@@ -154,52 +154,85 @@ class VisionService {
       line.words ? Math.max(...line.words.map(w => w.boundingPoly.vertices[1].x)) : 0
     ));
     
-    logger.info(`📱 Mobile Debug: Image dimensions: ${imageHeight}x${imageWidth}`);
+    logger.info(`📱 Mobile Debug: Image dimensions: ${imageWidth}x${imageHeight}`);
     
-    // Much more lenient filtering - only exclude obvious system text areas
-    // Exclude top 15% (status bar, clock) and bottom 5% (home indicator)
-    const excludeTopThreshold = minY + (imageHeight * 0.15);
-    const excludeBottomThreshold = maxY - (imageHeight * 0.05);
+    // PRIMARY STRATEGY: Focus on the podcast content area (50%-87.5% of screen height)
+    const primaryStartY = minY + (imageHeight * 0.50);  // 50% from top
+    const primaryEndY = minY + (imageHeight * 0.875);   // 87.5% from top
     
-    // Much smaller album art region
-    const centerX = imageWidth / 2;
-    const albumArtRegion = imageWidth * 0.15; // 15% around center (was 30%)
-    
-    const positionFiltered = lines.filter(line => {
-      // Filter by vertical position - much more lenient
-      if (line.avgY < excludeTopThreshold || line.avgY > excludeBottomThreshold) {
+    const primaryFiltered = lines.filter(line => {
+      // Must be in the primary content area
+      if (line.avgY < primaryStartY || line.avgY > primaryEndY) {
         return false;
       }
       
-      // REMOVED: Album art filtering logic - no longer excluding center text
+      // Exclude album art region (center area)
+      const centerX = imageWidth / 2;
+      const albumArtRegion = imageWidth * 0.25; // 25% around center for album art
+      const lineX = line.words ? line.words[0].boundingPoly.vertices[0].x : 0;
       
-      // Extra filtering for very large text in upper areas - much more lenient
-      if (line.avgY < excludeTopThreshold * 1.5 && line.avgArea > 8000) { // Much higher threshold (was 2000)
-          return false;
+      if (Math.abs(lineX - centerX) < albumArtRegion) {
+        logger.debug(`📱 Excluding album art text: "${line.text}"`);
+        return false;
       }
       
       return true;
     });
     
-    logger.info(`📱 Mobile Debug: Position filtered to ${positionFiltered.length} lines`);
+    logger.info(`📱 Mobile Debug: Primary area (50%-87.5%) filtered to ${primaryFiltered.length} lines`);
     
-    // If we filtered out too much, be very lenient
-    if (positionFiltered.length < 2) {
-      logger.info('📱 Mobile Debug: Too few lines after position filtering, using very lenient fallback');
-      const veryLenientExcludeTop = minY + (imageHeight * 0.1); // Only exclude top 10%
-      const veryLenientFiltered = lines.filter(line => {
-              // Only exclude very obvious system text
-      if (line.avgY < veryLenientExcludeTop && line.avgArea > 10000) { // Very high threshold
-        return false;
-      }
-        return true;
-      });
-      
-      logger.info(`📱 Mobile Debug: Very lenient filtered to ${veryLenientFiltered.length} lines`);
-      return veryLenientFiltered;
+    // If primary strategy found good candidates, use them
+    if (primaryFiltered.length >= 2) {
+      return primaryFiltered;
     }
     
-    return positionFiltered;
+    // FALLBACK STRATEGY: Search in 10%-20% area (upper content area)
+    logger.info('📱 Mobile Debug: Primary area insufficient, trying fallback area (10%-20%)');
+    const fallbackStartY = minY + (imageHeight * 0.10);  // 10% from top
+    const fallbackEndY = minY + (imageHeight * 0.20);    // 20% from top
+    
+    const fallbackFiltered = lines.filter(line => {
+      // Must be in the fallback content area
+      if (line.avgY < fallbackStartY || line.avgY > fallbackEndY) {
+        return false;
+      }
+      
+      // Exclude very large text (likely system UI)
+      if (line.avgArea > 5000) {
+        return false;
+      }
+      
+      return true;
+    });
+    
+    logger.info(`📱 Mobile Debug: Fallback area (10%-20%) filtered to ${fallbackFiltered.length} lines`);
+    
+    // If fallback found candidates, use them
+    if (fallbackFiltered.length >= 2) {
+      return fallbackFiltered;
+    }
+    
+    // LAST RESORT: Very lenient filtering
+    logger.info('📱 Mobile Debug: Both areas insufficient, using very lenient fallback');
+    const excludeTopThreshold = minY + (imageHeight * 0.15);
+    const excludeBottomThreshold = maxY - (imageHeight * 0.05);
+    
+    const lastResortFiltered = lines.filter(line => {
+      // Basic position filtering
+      if (line.avgY < excludeTopThreshold || line.avgY > excludeBottomThreshold) {
+        return false;
+      }
+      
+      // Only exclude very obvious system text
+      if (line.avgY < excludeTopThreshold * 1.2 && line.avgArea > 10000) {
+        return false;
+      }
+      
+      return true;
+    });
+    
+    logger.info(`📱 Mobile Debug: Last resort filtered to ${lastResortFiltered.length} lines`);
+    return lastResortFiltered;
   }
 
   groupWordsIntoLines(individualTexts) {
@@ -631,7 +664,8 @@ class VisionService {
 
   findSpatialPairs(candidates) {
     const pairs = [];
-    const maxDistance = 100; // Increased from 32 to 100px to capture more realistic UI spacing
+    const maxVerticalDistance = 100; // Maximum vertical distance for pairing
+    const maxHorizontalOverlap = 0.7; // Allow some horizontal overlap but ensure they're distinct
     
     // Sort candidates by Y position (top to bottom)
     const sortedCandidates = [...candidates].sort((a, b) => a.avgY - b.avgY);
@@ -641,31 +675,109 @@ class VisionService {
         const candidate1 = sortedCandidates[i]; // Higher on screen (lower Y)
         const candidate2 = sortedCandidates[j]; // Lower on screen (higher Y)
         
-        const distance = candidate2.avgY - candidate1.avgY;
+        // Calculate vertical distance (Y-axis only)
+        const verticalDistance = candidate2.avgY - candidate1.avgY;
         
-        // Only consider pairs that are reasonably close
-        if (distance <= maxDistance) {
-          pairs.push({
-            top: candidate1,
-            bottom: candidate2,
-            distance: distance
-          });
-          } else {
-          // Since we're sorted by Y, if this distance is too large, 
-          // all subsequent pairs with candidate1 will also be too large
+        // Skip if vertical distance is too large
+        if (verticalDistance > maxVerticalDistance) {
+          // Since we're sorted by Y, all subsequent pairs with candidate1 will be too far
           break;
+        }
+        
+        // Prevent same or very similar text from being paired together
+        const similarity = this.calculateTextSimilarity(candidate1.text, candidate2.text);
+        if (similarity > 0.8) {
+          logger.debug(`Skipping similar text pair: "${candidate1.text}" vs "${candidate2.text}" (similarity: ${similarity.toFixed(3)})`);
+          continue;
+        }
+        
+        // Calculate horizontal overlap to ensure they're not the same text block
+        const x1Start = candidate1.words?.[0]?.boundingPoly?.vertices?.[0]?.x || 0;
+        const x1End = candidate1.words?.[candidate1.words.length - 1]?.boundingPoly?.vertices?.[1]?.x || 0;
+        const x2Start = candidate2.words?.[0]?.boundingPoly?.vertices?.[0]?.x || 0;
+        const x2End = candidate2.words?.[candidate2.words.length - 1]?.boundingPoly?.vertices?.[1]?.x || 0;
+        
+        const overlap = Math.max(0, Math.min(x1End, x2End) - Math.max(x1Start, x2Start));
+        const minWidth = Math.min(x1End - x1Start, x2End - x2Start);
+        const overlapRatio = minWidth > 0 ? overlap / minWidth : 0;
+        
+        // Skip if too much horizontal overlap (likely same text block)
+        if (overlapRatio > maxHorizontalOverlap) {
+          logger.debug(`Skipping overlapping text: "${candidate1.text}" vs "${candidate2.text}" (overlap: ${(overlapRatio * 100).toFixed(1)}%)`);
+          continue;
+        }
+        
+        pairs.push({
+          top: candidate1,
+          bottom: candidate2,
+          distance: verticalDistance,
+          similarity: similarity,
+          horizontalOverlap: overlapRatio
+        });
+      }
+    }
+    
+    // Sort pairs by distance (closest pairs first), then by lower similarity (more distinct text)
+    pairs.sort((a, b) => {
+      if (Math.abs(a.distance - b.distance) < 10) {
+        // If distances are similar, prefer pairs with lower text similarity (more distinct)
+        return a.similarity - b.similarity;
+      }
+      return a.distance - b.distance;
+    });
+    
+    logger.info(`Found ${pairs.length} spatial pairs:`, pairs.map(p => 
+      `"${p.top.text}" + "${p.bottom.text}" (${p.distance}px apart, similarity: ${(p.similarity * 100).toFixed(1)}%)`
+    ));
+    
+    return pairs;
+  }
+
+  // Helper function to calculate text similarity
+  calculateTextSimilarity(text1, text2) {
+    if (!text1 || !text2) return 0;
+    
+    const normalize = (text) => text.toLowerCase().replace(/[^\w\s]/g, '').trim();
+    const norm1 = normalize(text1);
+    const norm2 = normalize(text2);
+    
+    if (norm1 === norm2) return 1.0;
+    
+    // Use Levenshtein distance for similarity
+    const maxLen = Math.max(norm1.length, norm2.length);
+    if (maxLen === 0) return 1.0;
+    
+    const distance = this.levenshteinDistance(norm1, norm2);
+    return 1 - (distance / maxLen);
+  }
+
+  // Levenshtein distance implementation
+  levenshteinDistance(str1, str2) {
+    const matrix = [];
+    
+    for (let i = 0; i <= str2.length; i++) {
+      matrix[i] = [i];
+    }
+    
+    for (let j = 0; j <= str1.length; j++) {
+      matrix[0][j] = j;
+    }
+    
+    for (let i = 1; i <= str2.length; i++) {
+      for (let j = 1; j <= str1.length; j++) {
+        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
+          );
         }
       }
     }
     
-    // Sort pairs by distance (closest pairs first)
-    pairs.sort((a, b) => a.distance - b.distance);
-    
-    logger.info(`Found ${pairs.length} spatial pairs:`, pairs.map(p => 
-      `"${p.top.text}" + "${p.bottom.text}" (${p.distance}px apart)`
-    ));
-    
-    return pairs;
+    return matrix[str2.length][str1.length];
   }
 
   async validateSpatialPair(podcastCandidate, episodeCandidate, pairType) {
