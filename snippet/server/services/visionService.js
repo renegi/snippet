@@ -114,7 +114,7 @@ class VisionService {
         throw new Error('Google Vision API quota exceeded - please try again later');
       } else if (error.message.includes('INVALID_IMAGE')) {
         throw new Error('Invalid image format - please use PNG, JPG, or WebP');
-      } else {
+        } else {
         throw new Error(`Vision API error: ${error.message}`);
       }
     }
@@ -177,14 +177,14 @@ class VisionService {
         // Only exclude very large text in center (likely album art)
         if (line.avgArea > 5000) { // Much higher threshold (was 2000)
           logger.info(`📱 Mobile Debug: Filtered out "${line.text}" - center album art (area:${line.avgArea})`);
-          return false;
+        return false;
         }
       }
       
       // Extra filtering for very large text in upper areas - much more lenient
       if (line.avgY < excludeTopThreshold * 1.5 && line.avgArea > 8000) { // Much higher threshold (was 2000)
         logger.info(`📱 Mobile Debug: Filtered out "${line.text}" - upper area large text (Y:${line.avgY}, area:${line.avgArea})`);
-        return false;
+          return false;
       }
       
       return true;
@@ -270,53 +270,53 @@ class VisionService {
     if (text.length < this.config.minCandidateLength || 
         text.length > this.config.maxCandidateLength) {
       logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - length (${text.length}) outside range [${this.config.minCandidateLength}-${this.config.maxCandidateLength}]`);
-      return false;
-    }
-    
+        return false;
+      }
+      
     // For word count: allow single words if they're substantial (like podcast names)
     if (line.wordCount < 1) {
       logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - no words`);
-      return false;
-    }
-    
+        return false;
+      }
+      
     // If it's a single word, it should be substantial (not just a short word)
     if (line.wordCount === 1 && text.length < 6) {
       logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - single word too short (${text.length} chars)`);
-      return false;
-    }
-    
+        return false;
+      }
+      
     // Language-agnostic pattern-based filtering
     
     // 1. Time patterns (any language)
     if (this.isTimePattern(text)) {
       logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - time pattern`);
-      return false;
-    }
-    
+        return false;
+      }
+      
     // 2. Date patterns (any language)
     if (this.isDatePattern(text)) {
       logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - date pattern`);
-      return false;
-    }
-    
+        return false;
+      }
+      
     // 3. Percentage patterns
     if (/\b\d+%/.test(text)) {
       logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - percentage pattern`);
-      return false;
-    }
-    
+        return false;
+      }
+      
     // 4. Pure numbers or symbols
     if (/^[\d\s\-:]+$/.test(text) || /^[^\w\s]+$/.test(text)) {
       logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - pure numbers/symbols`);
-      return false;
-    }
-    
+        return false;
+      }
+      
     // 5. Single character or very short words
     if (/^.{1,2}$/.test(text.replace(/\s/g, ''))) {
       logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - too short`);
-      return false;
-    }
-    
+        return false;
+      }
+      
     // 6. All caps - BUT only if short and likely UI elements
     // Allow longer all caps text that could be podcast names
     if (originalText === originalText.toUpperCase() && 
@@ -458,7 +458,7 @@ class VisionService {
       return true;
     }
     
-    return false;
+          return false;
   }
 
   scoreCandidate(line) {
@@ -601,15 +601,15 @@ class VisionService {
             candidates.filter(c => c.text !== candidate.text)
           );
           
-          return {
+                  return {
             podcastTitle: validation.validatedPodcast.title,
             episodeTitle: episodeCandidate?.title || 'Unknown Episode',
             confidence: validation.confidence,
             validation: validation,
             player: 'validated'
-          };
-        }
-      } catch (error) {
+                  };
+                }
+              } catch (error) {
         logger.debug(`Individual podcast validation error for ${candidate.text}:`, error.message);
       }
     }
@@ -623,20 +623,20 @@ class VisionService {
         if (episodeResults && episodeResults.length > 0) {
           const bestMatch = episodeResults[0];
           logger.info(`Episode search match found: ${bestMatch.trackName} from ${bestMatch.collectionName}`);
-          
-          return {
+                    
+                    return {
             podcastTitle: bestMatch.collectionName,
             episodeTitle: bestMatch.trackName,
             confidence: 0.8,
-            validation: {
-              validated: true,
+                      validation: {
+                        validated: true,
               method: 'episode_search',
               originalCandidate: candidate.text
             },
             player: 'validated'
           };
-        }
-      } catch (error) {
+              }
+            } catch (error) {
         logger.debug(`Episode search error for ${candidate.text}:`, error.message);
       }
     }
@@ -645,10 +645,10 @@ class VisionService {
     logger.info('No validation successful, returning best candidates');
     const topCandidates = candidates.slice(0, 2);
     
-    return {
+            return {
       podcastTitle: topCandidates[1]?.text || 'Unknown Podcast',
       episodeTitle: topCandidates[0]?.text || 'Unknown Episode',
-      confidence: 0.3,
+                  confidence: 0.3,
       validation: { validated: false, method: 'unvalidated_candidates' },
       player: 'unvalidated'
     };
@@ -656,7 +656,7 @@ class VisionService {
 
   findSpatialPairs(candidates) {
     const pairs = [];
-    const maxDistance = 32; // Maximum pixels from top of one line to bottom of another
+    const maxDistance = 100; // Increased from 32 to 100px to capture more realistic UI spacing
     
     // Sort candidates by Y position (top to bottom)
     const sortedCandidates = [...candidates].sort((a, b) => a.avgY - b.avgY);
@@ -718,8 +718,8 @@ class VisionService {
         if (exactEpisodeValidation.validated && 
             exactEpisodeValidation.validatedEpisode?.confidence >= 0.5) {
           logger.info(`Exact episode validation successful: "${exactEpisodeValidation.validatedEpisode.title}"`);
-          return {
-            success: true,
+                      return {
+                        success: true,
             podcastTitle: podcastValidation.validatedPodcast.title,
             episodeTitle: exactEpisodeValidation.validatedEpisode.title,
             confidence: Math.min(podcastValidation.confidence, exactEpisodeValidation.confidence),
@@ -730,9 +730,9 @@ class VisionService {
               episodeCandidate: episodeCandidate.text
             },
             player: 'validated'
-          };
-        }
-      } catch (error) {
+                      };
+                    }
+                  } catch (error) {
         logger.debug('Exact episode validation failed, trying fuzzy search:', error.message);
       }
       
@@ -745,12 +745,12 @@ class VisionService {
       
       if (fuzzyResult.success) {
         logger.info(`Fuzzy episode search successful: "${fuzzyResult.episodeTitle}"`);
-        return {
-          success: true,
+              return {
+                success: true,
           podcastTitle: podcastValidation.validatedPodcast.title,
           episodeTitle: fuzzyResult.episodeTitle,
           confidence: Math.min(podcastValidation.confidence, fuzzyResult.confidence),
-          validation: {
+                validation: {
             validated: true,
             method: `spatial_pair_${pairType}_fuzzy`,
             podcastCandidate: podcastCandidate.text,
@@ -794,7 +794,7 @@ class VisionService {
         const matchedKeywords = keywords.filter(keyword => episodeTitle.includes(keyword));
         const matchScore = matchedKeywords.length / keywords.length;
         
-        return {
+          return {
           episode,
           matchedKeywords,
           matchScore
@@ -806,7 +806,7 @@ class VisionService {
         const bestMatch = matchingEpisodes[0];
         logger.info(`Best fuzzy match: "${bestMatch.episode.trackName}" (score: ${bestMatch.matchScore}, keywords: [${bestMatch.matchedKeywords.join(', ')}])`);
         
-        return {
+    return {
           success: true,
           episodeTitle: bestMatch.episode.trackName,
           confidence: 0.6 + (bestMatch.matchScore * 0.2), // 0.6-0.8 confidence range
@@ -829,6 +829,12 @@ class VisionService {
     try {
       // Get episodes for this podcast
       const allEpisodes = await applePodcastsService.searchEpisodes(validatedPodcast.id, null);
+      
+      // Ensure allEpisodes is an array
+      if (!Array.isArray(allEpisodes)) {
+        logger.warn('allEpisodes is not an array:', typeof allEpisodes, allEpisodes);
+        return null;
+      }
       
       // Try to match candidates with actual episodes
       for (const candidate of episodeCandidates) {
@@ -906,9 +912,9 @@ class VisionService {
       
       const hasClockContext = clockContextIndicators.some(pattern => pattern.test(context));
       if (hasClockContext) {
-        return false;
-      }
-      
+      return false;
+    }
+    
       // IMPORTANT: Exclude if this time appears with a negative sign
       // We only want positive timestamps (current position), not remaining time
       if (fullText.includes('-' + time)) {
@@ -929,9 +935,9 @@ class VisionService {
       // Check for progress-like context (multiple times, progress bars)
       const timeCount = (nearbyText.match(/\d{1,2}:\d{2}/g) || []).length;
       if (timeCount >= 2) { // Multiple times nearby suggests progress display
-        return true;
-      }
-      
+      return true;
+    }
+    
       // Single time in podcast player context is also good
       return true;
     });
