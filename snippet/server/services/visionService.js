@@ -320,9 +320,9 @@ class VisionService {
       logger.info(`Line ${index}: "${line.text}" (Y=${line.avgY}, X=${line.avgX}, area=${line.avgArea}, words=${line.wordCount})`);
     });
     
-    // EXPANDED: Consider lines in a broader section (10%-90%) to capture podcast names at the top
-    let bottomThreshold = maxY * (1 / 10); // Start at 10% (include top area where podcast names often appear)
-    let topThreshold = maxY * (9 / 10); // End at 90% (exclude bottom 10% where ads appear)
+    // CONSERVATIVE: Focus on the middle section (30%-80%) to avoid UI elements
+    let bottomThreshold = maxY * (3 / 10); // Start at 30% (avoid status bar and battery info)
+    let topThreshold = maxY * (8 / 10); // End at 80% (avoid bottom controls)
     let bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
     
     logger.info(`Primary detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
@@ -334,10 +334,10 @@ class VisionService {
       logger.info(`Line ${index}: "${line.text}" (Y=${line.avgY}) - ${inRange ? '✅ IN RANGE' : '❌ OUT OF RANGE'}`);
     });
     
-    // If we don't find enough candidates, expand the range even more
+    // If we don't find enough candidates, expand slightly but still be conservative
     if (bottomLines.length < 2) {
-      bottomThreshold = maxY * (1 / 20); // Start at 5%
-      topThreshold = maxY * (19 / 20); // End at 95% (exclude only the very bottom)
+      bottomThreshold = maxY * (2 / 10); // Start at 20% (still avoid status bar)
+      topThreshold = maxY * (85 / 100); // End at 85% (still avoid bottom controls)
       bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
       logger.info(`Expanded detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
     }
@@ -377,10 +377,24 @@ class VisionService {
         return false;
       }
       
-      // Filter out UI elements
-      const uiElements = ['play', 'pause', 'stop', 'skip', 'forward', 'backward', 'volume'];
+      // Filter out UI elements and system text
+      const uiElements = ['play', 'pause', 'stop', 'skip', 'forward', 'backward', 'volume', 'airplay', 'output'];
       if (uiElements.some(element => description.includes(element))) {
         logger.info(`  → FILTERED: UI element detected`);
+        return false;
+      }
+      
+      // Filter out battery and system status text
+      const systemText = ['%', 'de carga', 'battery', 'wifi', 'signal', 'spectrum', 'lock', 'unlock'];
+      if (systemText.some(text => description.includes(text))) {
+        logger.info(`  → FILTERED: System text detected`);
+        return false;
+      }
+      
+      // Filter out time patterns that are not timestamps
+      if (description.match(/^\d{1,2}:\d{2}$/) && !description.match(/^\d{1,2}:\d{2}:\d{2}$/)) {
+        // This is likely a clock time, not a podcast timestamp
+        logger.info(`  → FILTERED: Clock time detected`);
         return false;
       }
       
@@ -576,30 +590,8 @@ class VisionService {
     // Combine original candidates with additional ones
     const allCandidates = [...cleanedCandidates, ...additionalCandidates];
     
-    // NEW: Special case - ensure "Search Engine" is always included if detected anywhere
-    const searchEngineInFullText = fullText.toLowerCase().includes('search engine');
-    const searchEngineInCandidates = allCandidates.some(c => c.text.toLowerCase().includes('search engine'));
-    
-    if (searchEngineInFullText && !searchEngineInCandidates) {
-      logger.info('🔍 "Search Engine" detected in full text but not in candidates - adding it manually');
-      
-      // Find the "Search Engine" text in the original lines
-      const searchEngineLine = joinedLines.find(line => 
-        line.text.toLowerCase().includes('search engine')
-      );
-      
-      if (searchEngineLine) {
-        allCandidates.push({
-          text: 'Search Engine',
-          avgY: searchEngineLine.avgY,
-          avgX: searchEngineLine.avgX,
-          avgArea: searchEngineLine.avgArea,
-          wordCount: searchEngineLine.wordCount,
-          source: 'manual_search_engine_addition'
-        });
-        logger.info('✅ Added "Search Engine" to candidates manually');
-      }
-    }
+    // REMOVED: Special case for "Search Engine" as it was picking up album art text
+    // We'll rely on the normal detection area and filtering logic instead
     
     // DEBUG: Log all candidates including additional ones
     logger.info('All candidates (including additional):', JSON.stringify(allCandidates, null, 2));
@@ -1252,6 +1244,29 @@ class VisionService {
     // Create a list of all possible combinations to try
     const combinations = [];
     
+    // Helper function to check if text looks like a valid episode title
+    const isValidEpisodeCandidate = (text) => {
+      const description = text.toLowerCase().trim();
+      
+      // Filter out system text and UI elements
+      const systemText = ['%', 'de carga', 'battery', 'wifi', 'signal', 'spectrum', 'lock', 'unlock', 'play', 'pause', 'stop', 'skip', 'forward', 'backward', 'volume', 'airplay', 'output'];
+      if (systemText.some(sysText => description.includes(sysText))) {
+        return false;
+      }
+      
+      // Filter out clock times
+      if (description.match(/^\d{1,2}:\d{2}$/) && !description.match(/^\d{1,2}:\d{2}:\d{2}$/)) {
+        return false;
+      }
+      
+      // Must have reasonable length for an episode title
+      if (description.length < 3 || description.length > 100) {
+        return false;
+      }
+      
+      return true;
+    };
+    
     // 1. Try swapping the original podcast and episode titles
     if (podcastTitle && episodeTitle) {
       combinations.push({
@@ -1274,15 +1289,18 @@ class VisionService {
       });
     }
     
-    // 3. Try each candidate as episode title with the original podcast
+    // 3. Try each candidate as episode title with the original podcast (only if valid)
     if (podcastTitle) {
       candidates.forEach(candidate => {
-        if (candidate.text !== podcastTitle && candidate.text !== episodeTitle) {
+        if (candidate.text !== podcastTitle && candidate.text !== episodeTitle && isValidEpisodeCandidate(candidate.text)) {
+          logger.info(`Testing "${candidate.text}" as episode candidate (passed validation)`);
           combinations.push({
             podcast: podcastTitle,
             episode: candidate.text,
             source: `candidate_as_episode: ${candidate.text}`
           });
+        } else if (candidate.text !== podcastTitle && candidate.text !== episodeTitle) {
+          logger.info(`Skipping "${candidate.text}" as episode candidate (failed validation)`);
         }
       });
     }
