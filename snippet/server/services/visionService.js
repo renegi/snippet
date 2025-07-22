@@ -82,7 +82,7 @@ class VisionService {
       
       // Extract structured information
       const candidates = this.extractTextCandidates(detections);
-      const timestamp = this.extractTimestamp(fullText);
+      const timestamp = this.extractTimestamp(fullText, detections);
       
       logger.info(`Found ${candidates.length} text candidates`);
       
@@ -286,6 +286,14 @@ class VisionService {
   isValidCandidate(line) {
     const text = line.text.toLowerCase().trim();
     const originalText = line.text.trim();
+    
+    // STRICTER SIZE FILTERING: Prevent small thumbnail text
+    // Text must be substantial enough to be main podcast/episode titles
+    const minTextArea = 1200; // Increased from default to exclude small thumbnails
+    if (line.avgArea < minTextArea) {
+      logger.debug(`📱 Excluding small text: "${originalText}" (area: ${line.avgArea})`);
+      return false;
+    }
     
     // Basic length and word count filters - be more lenient for single words
     if (text.length < this.config.minCandidateLength || 
@@ -1047,13 +1055,58 @@ class VisionService {
       .slice(0, 8); // Limit to top 8 keywords to avoid noise
   }
 
-  extractTimestamp(fullText) {
+  extractTimestamp(fullText, textAnnotations) {
     // Extract time patterns that look like podcast timestamps
     const timeRegex = /\b(\d{1,2}:\d{2}(?::\d{2})?)\b/g;
-    const allTimes = [...fullText.matchAll(timeRegex)].map(m => m[0]);
+    const allMatches = [...fullText.matchAll(timeRegex)];
     
-    // Filter out times that are likely clock times using multiple strategies
-    const podcastTimes = allTimes.filter(time => {
+    if (allMatches.length === 0) return null;
+    
+    // Calculate position filtering boundaries (same as text candidates)
+    const lines = this.groupWordsIntoLines(textAnnotations.slice(1));
+    if (lines.length === 0) return null;
+    
+    const maxY = Math.max(...lines.map(line => line.avgY));
+    const minY = Math.min(...lines.map(line => line.avgY));
+    const imageHeight = maxY - minY;
+    
+    // Apply same position filtering as text candidates: 50%-87.5% primary area
+    const primaryStartY = minY + (imageHeight * 0.50);
+    const primaryEndY = minY + (imageHeight * 0.875);
+    
+    // Find times that are in the correct position area
+    const positionFilteredTimes = allMatches.filter(match => {
+      const time = match[0];
+      const timeIndex = match.index;
+      
+      // Find the Y position of this time by looking at text annotations
+      let timeY = null;
+      for (const word of textAnnotations.slice(1)) {
+        const wordText = word.description;
+        const wordStart = fullText.indexOf(wordText, timeIndex - 20);
+        const wordEnd = wordStart + wordText.length;
+        
+        // If this word contains or is near our timestamp
+        if (wordStart <= timeIndex && timeIndex <= wordEnd + 5) {
+          timeY = word.boundingPoly.vertices[0].y;
+          break;
+        }
+      }
+      
+      // If we can't find position, exclude (likely system clock)
+      if (timeY === null) return false;
+      
+      // Apply position filtering - must be in content area
+      if (timeY < primaryStartY || timeY > primaryEndY) {
+        logger.debug(`📱 Excluding timestamp "${time}" outside content area (Y: ${timeY}, range: ${primaryStartY}-${primaryEndY})`);
+        return false;
+      }
+      
+      return true;
+    }).map(match => match[0]);
+    
+    // Context-based filtering for remaining times
+    const podcastTimes = positionFilteredTimes.filter(time => {
       // Strategy 1: Context analysis
       const timeIndex = fullText.indexOf(time);
       const context = fullText.substring(
@@ -1065,17 +1118,20 @@ class VisionService {
       const clockContextIndicators = [
         /\b(morning|afternoon|evening|night|mañana|tarde|noche)\b/,
         /\b(today|tomorrow|yesterday|hoy|mañana|ayer)\b/,
-        /\b(scheduled|programado|optimizada|recarga)\b/
+        /\b(scheduled|programado|optimizada|recarga)\b/,
+        /\b(wi-fi|wifi|battery|batería)\b/ // System status indicators
       ];
       
       const hasClockContext = clockContextIndicators.some(pattern => pattern.test(context));
       if (hasClockContext) {
-      return false;
-    }
-    
+        logger.debug(`📱 Excluding timestamp "${time}" with clock context`);
+        return false;
+      }
+      
       // IMPORTANT: Exclude if this time appears with a negative sign
       // We only want positive timestamps (current position), not remaining time
       if (fullText.includes('-' + time)) {
+        logger.debug(`📱 Excluding negative timestamp "-${time}"`);
         return false;
       }
       
@@ -1093,16 +1149,24 @@ class VisionService {
       // Check for progress-like context (multiple times, progress bars)
       const timeCount = (nearbyText.match(/\d{1,2}:\d{2}/g) || []).length;
       if (timeCount >= 2) { // Multiple times nearby suggests progress display
-      return true;
-    }
-    
+        return true;
+      }
+      
       // Single time in podcast player context is also good
       return true;
     });
     
     // Return the first valid positive podcast timestamp
     const finalTimes = likelyPodcastTimes.length > 0 ? likelyPodcastTimes : podcastTimes;
-    return finalTimes.length > 0 ? finalTimes[0] : null;
+    const selectedTime = finalTimes.length > 0 ? finalTimes[0] : null;
+    
+    if (selectedTime) {
+      logger.info(`📱 Selected timestamp: "${selectedTime}" from ${allMatches.length} total time patterns`);
+    } else {
+      logger.info(`📱 No valid timestamp found from ${allMatches.length} total time patterns`);
+    }
+    
+    return selectedTime;
   }
 }
 
