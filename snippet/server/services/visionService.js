@@ -559,37 +559,93 @@ class VisionService {
     // Sort by vertical position (top to bottom)
     allCandidates.sort((a, b) => a.avgY - b.avgY);
 
-    // Find episode and podcast titles based on your rules:
-    // 1. Episode is above podcast
-    // 2. Episode has larger font (avgArea)
-    // 3. Both should be multi-word strings
+    // Find episode and podcast titles based on multiple criteria:
+    // 1. Episode is typically above podcast
+    // 2. Episode titles are often longer/more descriptive
+    // 3. Podcast names are often shorter/brand names
+    // 4. Font size can vary, so we use it as a secondary factor
     let episodeTitle = null;
     let podcastTitle = null;
 
     if (allCandidates.length >= 2) {
-      // Take the two largest candidates by area (font size)
-      const sortedByArea = [...allCandidates].sort((a, b) => b.avgArea - a.avgArea);
-      const candidate1 = sortedByArea[0]; // Largest (should be episode)
-      const candidate2 = sortedByArea[1]; // Second largest (should be podcast)
+      // Sort candidates by Y position (top to bottom)
+      const sortedByPosition = [...allCandidates].sort((a, b) => a.avgY - b.avgY);
       
-      // Assign based on position: episode should be above podcast
-      if (candidate1.avgY < candidate2.avgY) {
-        // candidate1 is above candidate2 - correct order
+      // NEW: Use multiple criteria to determine episode vs podcast
+      const candidate1 = sortedByPosition[0]; // Top candidate
+      const candidate2 = sortedByPosition[1]; // Bottom candidate
+      
+      // Calculate scores for each candidate being an episode
+      const getEpisodeScore = (candidate) => {
+        let score = 0;
+        
+        // Position score (episode is usually above)
+        score += 0.3;
+        
+        // Length score (episodes are usually longer/more descriptive)
+        const length = candidate.text.length;
+        if (length > 20) score += 0.3;
+        else if (length > 10) score += 0.2;
+        else if (length > 5) score += 0.1;
+        
+        // Word count score (episodes usually have more words)
+        const wordCount = candidate.wordCount;
+        if (wordCount > 3) score += 0.2;
+        else if (wordCount > 2) score += 0.1;
+        
+        // Content score (episodes often have descriptive words)
+        const text = candidate.text.toLowerCase();
+        const descriptiveWords = ['the', 'and', 'how', 'why', 'what', 'when', 'where', 'with', 'from', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below'];
+        const hasDescriptiveWords = descriptiveWords.some(word => text.includes(word));
+        if (hasDescriptiveWords) score += 0.1;
+        
+        // Known podcast names score (these are likely podcasts, not episodes)
+        const knownPodcastNames = ['marketplace', 'serial', 'radiolab', 'freakonomics', 'planet money', 'this american life', 'npr', 'bbc', 'cnn'];
+        if (knownPodcastNames.includes(text)) {
+          score -= 0.3; // Penalize known podcast names
+        }
+        
+        // Truncation score (episodes are often truncated)
+        if (this.isPotentiallyTruncated(candidate.text)) score += 0.1;
+        
+        return score;
+      };
+      
+      const score1 = getEpisodeScore(candidate1);
+      const score2 = getEpisodeScore(candidate2);
+      
+      logger.info(`Episode scoring: "${candidate1.text}" = ${score1}, "${candidate2.text}" = ${score2}`);
+      
+      // Assign based on episode scores
+      if (score1 > score2) {
         episodeTitle = candidate1.text.trim();
         podcastTitle = candidate2.text.trim();
+        logger.info(`Assigned episode: "${episodeTitle}", podcast: "${podcastTitle}" (score-based)`);
       } else {
-        // candidate2 is above candidate1 - swap
         episodeTitle = candidate2.text.trim();
         podcastTitle = candidate1.text.trim();
+        logger.info(`Assigned episode: "${episodeTitle}", podcast: "${podcastTitle}" (score-based)`);
       }
     } else if (allCandidates.length === 1) {
       // Only one candidate - assume it's the episode
       episodeTitle = allCandidates[0].text.trim();
+      logger.info(`Single candidate assigned as episode: "${episodeTitle}"`);
     }
 
     // NEW: Validate titles immediately after identification
+    logger.info('=== TITLE VALIDATION START ===');
+    logger.info(`Detected candidates: ${allCandidates.map(c => `"${c.text}" (Y=${c.avgY}, area=${c.avgArea}, words=${c.wordCount})`).join(', ')}`);
+    logger.info(`Assigned episode: "${episodeTitle}"`);
+    logger.info(`Assigned podcast: "${podcastTitle}"`);
     logger.info('Validating identified titles with Apple Podcasts API...');
     const validationResult = await applePodcastsService.validatePodcastInfo(podcastTitle, episodeTitle);
+    
+    logger.info(`Validation result:`, {
+      validated: validationResult.validated,
+      confidence: validationResult.confidence,
+      validatedPodcast: validationResult.validatedPodcast?.title,
+      validatedEpisode: validationResult.validatedEpisode?.title
+    });
     
     // Use validated titles if available, otherwise keep original
     if (validationResult.validatedPodcast) {
