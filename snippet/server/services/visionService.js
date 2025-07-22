@@ -1010,7 +1010,7 @@ class VisionService {
             logger.info(`High-confidence podcast found, searching for episodes via enhanced keyword search...`);
             try {
               const allEpisodes = await applePodcastsService.searchEpisodes(podcastOnlyValidation.validatedPodcast.id, null);
-              logger.info(`Retrieved ${allEpisodes.length} episodes for keyword matching`);
+              logger.info(`Retrieved ${allEpisodes.episodes?.length || 0} episodes for keyword matching`);
               
               // Try to match episode candidates with actual episodes using enhanced keywords
               for (const episodeCandidate of otherCandidates) {
@@ -1024,7 +1024,7 @@ class VisionService {
                   );
                 
                 if (keywords.length > 0) {
-                  const keywordMatches = allEpisodes.filter(episode => {
+                  const keywordMatches = (allEpisodes.episodes || []).filter(episode => {
                     const episodeTitle = episode.trackName.toLowerCase();
                     const matchCount = keywords.filter(keyword => episodeTitle.includes(keyword)).length;
                     return matchCount >= Math.min(2, keywords.length); // Require at least 2 keywords or all keywords if less than 2
@@ -1096,10 +1096,10 @@ class VisionService {
       try {
         logger.info(`Searching for episodes matching: "${candidate.text}"`);
         const episodeSearchResults = await applePodcastsService.searchEpisodes(null, candidate.text);
-        logger.info(`Episode search returned ${episodeSearchResults.length} results`);
+        logger.info(`Episode search returned ${episodeSearchResults.episodes?.length || 0} results`);
         
-        if (episodeSearchResults.length > 0) {
-          const bestMatch = episodeSearchResults[0];
+        if (episodeSearchResults.episodes && episodeSearchResults.episodes.length > 0) {
+          const bestMatch = episodeSearchResults.episodes[0];
           logger.info(`Found episode "${bestMatch.trackName}" in podcast "${bestMatch.collectionName}"`);
           
           // Check if any other candidates match the podcast name
