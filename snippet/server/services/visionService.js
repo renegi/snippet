@@ -587,8 +587,14 @@ class VisionService {
     logger.info(`Detected candidates: ${allCandidates.map(c => `"${c.text}" (Y=${c.avgY}, area=${c.avgArea}, words=${c.wordCount})`).join(', ')}`);
     logger.info(`Assigned episode: "${episodeTitle}"`);
     logger.info(`Assigned podcast: "${podcastTitle}"`);
-    logger.info('Validating identified titles with Apple Podcasts API...');
-    const validationResult = await applePodcastsService.validatePodcastInfo(podcastTitle, episodeTitle);
+    
+    // NEW: Run timestamp detection and title validation in parallel
+    logger.info('Running timestamp detection and title validation in parallel...');
+    
+    const [timestamp, validationResult] = await Promise.all([
+      this.extractTimestamp(individualTexts, fullText),
+      applePodcastsService.validatePodcastInfo(podcastTitle, episodeTitle)
+    ]);
     
     logger.info(`Validation result:`, {
       validated: validationResult.validated,
@@ -648,6 +654,23 @@ class VisionService {
       }
     }
 
+    // Return final result with parallel-processed data
+    return {
+      podcastTitle,
+      episodeTitle,
+      timestamp,
+      player: 'unknown',
+      debug: {
+        titleCandidates: allCandidates,
+        timestampMethod: timestamp ? 'context_filtered' : 'not_found'
+      }
+    };
+  }
+
+  // NEW: Extract timestamp detection into separate function for parallel execution
+  extractTimestamp(individualTexts, fullText) {
+    logger.info('=== TIMESTAMP DETECTION START ===');
+    
     // Extract timestamp using improved logic with size-based filtering
     const timeRegex = /(-?\d{1,2}:\d{2}(?::\d{2})?)/g;
     const allTimes = [...fullText.matchAll(timeRegex)].map(m => m[0]);
@@ -774,29 +797,12 @@ class VisionService {
         fallbackTimes.sort((a, b) => a.area - b.area);
         const fallbackTime = fallbackTimes[0].time;
         logger.info(`Using fallback timestamp: ${fallbackTime} (area: ${fallbackTimes[0].area})`);
-        return {
-          podcastTitle,
-          episodeTitle,
-          timestamp: fallbackTime,
-          player: 'unknown',
-          debug: {
-            titleCandidates: allCandidates,
-            timestampMethod: 'fallback_size_filtered'
-          }
-        };
+        return fallbackTime;
       }
     }
-
-    return {
-      podcastTitle,
-      episodeTitle,
-      timestamp,
-      player: 'unknown',
-      debug: {
-        titleCandidates: allCandidates,
-        timestampMethod: timestamp ? 'context_filtered' : 'not_found'
-      }
-    };
+    
+    logger.info(`Final timestamp: ${timestamp}`);
+    return timestamp;
   }
 
   async tryFallbackValidation(podcastTitle, episodeTitle, candidates) {
