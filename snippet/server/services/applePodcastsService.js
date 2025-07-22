@@ -125,6 +125,7 @@ class ApplePodcastsService {
             title: bestMatch.result.collectionName,
             artist: bestMatch.result.artistName,
             feedUrl: bestMatch.result.feedUrl,
+            artworkUrl: bestMatch.result.artworkUrl100 || bestMatch.result.artworkUrl600,
             confidence: bestMatch.similarity
           },
           suggestions: results.slice(0, 3).map(r => ({
@@ -190,6 +191,7 @@ class ApplePodcastsService {
             title: bestMatch.result.trackName,
             description: bestMatch.result.description,
             duration: bestMatch.result.trackTimeMillis,
+            artworkUrl: bestMatch.result.artworkUrl100 || bestMatch.result.artworkUrl600,
             confidence: bestMatch.similarity
           }
         };
