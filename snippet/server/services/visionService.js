@@ -336,7 +336,7 @@ class VisionService {
       logger.info(`Considering line: "${line.text}" (Y=${line.avgY}, wordCount=${line.wordCount}, length=${description.length})`);
       
       // Must have multiple words (more lenient in fallback mode)
-      // Allow single words in fallback mode for podcast names like "PLANET MONEY"
+      // Allow single words in fallback mode for podcast names
       const minWords = isFallbackArea ? 1 : 2;
       if (line.wordCount < minWords) {
         logger.info(`  → FILTERED: Too few words (${line.wordCount}, minimum: ${minWords})`);
@@ -391,13 +391,8 @@ class VisionService {
       
       // In fallback mode, only filter out obvious ads, not potential podcast names
       if (hasAdKeyword) {
-        if (isFallbackArea && (description.includes('planet money') || description.includes('marketplace'))) {
-          logger.info(`  → KEPT: Potential podcast name despite ad keyword in fallback mode`);
-          // Continue processing
-        } else {
-          logger.info(`  → FILTERED: Advertisement keyword detected`);
-          return false;
-        }
+        logger.info(`  → FILTERED: Advertisement keyword detected`);
+        return false;
       }
       
       // Filter out navigation/menu items - BUT allow "Search Engine" as it's a valid podcast name
@@ -524,13 +519,8 @@ class VisionService {
     // NEW: Look for standalone podcast names that might be separated from episode titles
     const podcastNameCandidates = bottomLines.filter(line => {
       const text = line.text.toLowerCase().trim();
-      // Look for common podcast names that might be standalone
+      // Look for podcast names that might be standalone
       return (
-        text === 'marketplace' ||
-        text === 'serial' ||
-        text === 'radiolab' ||
-        text === 'freakonomics' ||
-        text === 'planet money' ||
         text.includes('search engine') ||
         this.looksLikePodcastName(line.text)
       );
