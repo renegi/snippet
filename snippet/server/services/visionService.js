@@ -703,14 +703,16 @@ class VisionService {
               method: `spatial_pair_${pairType}_exact`,
               podcastCandidate: podcastCandidate.text,
               episodeCandidate: episodeCandidate.text,
-              validatedPodcast: {
-                id: podcastValidation.validatedPodcast.id,
-                title: podcastValidation.validatedPodcast.title,
-                confidence: podcastValidation.validatedPodcast.confidence
-              },
+                          validatedPodcast: {
+              id: podcastValidation.validatedPodcast.id,
+              title: podcastValidation.validatedPodcast.title,
+              artworkUrl: podcastValidation.validatedPodcast.artworkUrl,
+              confidence: podcastValidation.validatedPodcast.confidence
+            },
               validatedEpisode: {
                 id: exactEpisodeValidation.validatedEpisode.id,
                 title: exactEpisodeValidation.validatedEpisode.title,
+                artworkUrl: exactEpisodeValidation.validatedEpisode.artworkUrl,
                 confidence: exactEpisodeValidation.validatedEpisode.confidence
               }
             },
@@ -744,11 +746,13 @@ class VisionService {
             validatedPodcast: {
               id: podcastValidation.validatedPodcast.id,
               title: podcastValidation.validatedPodcast.title,
+              artworkUrl: podcastValidation.validatedPodcast.artworkUrl,
               confidence: podcastValidation.validatedPodcast.confidence
             },
             validatedEpisode: {
               id: fuzzyResult.episodeId,
               title: fuzzyResult.episodeTitle,
+              artworkUrl: fuzzyResult.artworkUrl,
               confidence: fuzzyResult.confidence
             }
           },
@@ -820,6 +824,7 @@ class VisionService {
           success: true,
           episodeTitle: bestMatch.episode.trackName,
           episodeId: bestMatch.episode.trackId,
+          artworkUrl: bestMatch.episode.artworkUrl100 || bestMatch.episode.artworkUrl600,
           confidence: 0.5 + (bestMatch.matchScore * 0.3), // 0.5-0.8 confidence range
           matchScore: bestMatch.matchScore,
           matchedKeywords: bestMatch.matchedKeywords,

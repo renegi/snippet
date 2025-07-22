@@ -300,108 +300,18 @@ class ApplePodcastsService {
     
     if (s1 === s2) return 1;
     
-    // PRIORITY 1: Exact substring matches (highest priority for truncated titles)
+    // NEW: Prioritize substring matches (common with truncated episode titles)
     if (s1.includes(s2) || s2.includes(s1)) {
       // Calculate how much of the longer string is covered
       const longer = s1.length > s2.length ? s1 : s2;
       const shorter = s1.length > s2.length ? s2 : s1;
       const coverage = shorter.length / longer.length;
       
-      // Very high score for substring matches, especially when search term is shorter
-      if (s1.length <= s2.length) {
-        // Search term is shorter (likely truncated), give it very high priority
-        // But check if this is a meaningful phrase match vs just word coincidence
-        const searchWords = s1.split(/\s+/).filter(w => w.length > 0);
-        const targetWords = s2.split(/\s+/).filter(w => w.length > 0);
-        
-        // If search term has multiple words, check if they appear as a phrase
-        if (searchWords.length >= 2) {
-          let hasPhraseMatch = false;
-          for (let i = 0; i <= targetWords.length - searchWords.length; i++) {
-            let phraseMatch = true;
-            for (let j = 0; j < searchWords.length; j++) {
-              if (searchWords[j] !== targetWords[i + j]) {
-                phraseMatch = false;
-                break;
-              }
-            }
-            if (phraseMatch) {
-              hasPhraseMatch = true;
-              break;
-            }
-          }
-          
-          if (hasPhraseMatch) {
-            // This is a meaningful phrase match, give it maximum priority
-            let semanticBoost = 0;
-            
-            // Semantic boost for question marks (common in truncated titles)
-            if (str1.includes('?') && str2.includes('?')) {
-              semanticBoost += 0.002;
-            }
-            
-            // Semantic boost for longer titles (more likely to be the full title)
-            if (str2.length > str1.length * 2) {
-              semanticBoost += 0.001;
-            }
-            
-            // Semantic boost for titles that start with the search phrase
-            const normalizedSearch = s1.trim();
-            const normalizedTarget = s2.trim();
-            if (normalizedTarget.startsWith(normalizedSearch) || 
-                normalizedTarget.includes(' ' + normalizedSearch)) {
-              semanticBoost += 0.001;
-            }
-            
-            return Math.min(1, 0.995 + (coverage * 0.005) + semanticBoost);
-          }
-        }
-        
-        // Regular substring match
-        return 0.98 + (coverage * 0.02); // 0.98 to 1.0 range
-      } else {
-        // Search term is longer, still good but not as high priority
-        return 0.8 + (coverage * 0.2); // 0.8 to 1.0 range
-      }
+      // Higher score for better coverage
+      return 0.8 + (coverage * 0.2); // 0.8 to 1.0 range
     }
     
-    // PRIORITY 1.5: Check if search term appears as a phrase in the target
-    // This handles cases like "WE BEGIN ?" matching "Where Should We Begin?"
-    const searchWords = s1.split(/\s+/).filter(w => w.length > 0);
-    const targetWords = s2.split(/\s+/).filter(w => w.length > 0);
-    
-    if (searchWords.length >= 2) {
-      // Check if consecutive words from search term appear in target
-      for (let i = 0; i <= targetWords.length - searchWords.length; i++) {
-        let consecutiveMatch = true;
-        for (let j = 0; j < searchWords.length; j++) {
-          const searchWord = searchWords[j];
-          const targetWord = targetWords[i + j];
-          
-          // Allow exact match or partial match for consecutive words
-          if (!(searchWord === targetWord || 
-                (searchWord.length >= 2 && targetWord.length >= 2 && 
-                 (searchWord.startsWith(targetWord) || targetWord.startsWith(searchWord))))) {
-            consecutiveMatch = false;
-            break;
-          }
-        }
-        
-        if (consecutiveMatch) {
-          // Found consecutive word match, give it very high priority
-          // But give even higher priority if the search term is shorter (likely truncated)
-          const coverage = searchWords.length / Math.max(searchWords.length, targetWords.length);
-          if (s1.length <= s2.length) {
-            // Search term is shorter, likely truncated - give maximum priority
-            return 0.99 + (coverage * 0.01); // 0.99 to 1.0 range
-          } else {
-            return 0.96 + (coverage * 0.04); // 0.96 to 1.0 range
-          }
-        }
-      }
-    }
-    
-    // PRIORITY 2: Check for partial word matches (handles truncated words)
+    // NEW: Check for partial word matches (handles truncated words)
     const words1 = s1.split(/\s+/);
     const words2 = s2.split(/\s+/);
     
@@ -412,10 +322,10 @@ class ApplePodcastsService {
       for (const word2 of words2) {
         if (word1 === word2) {
           exactWordMatches++;
-        } else if (word1.length >= 2 && word2.length >= 2) {
+        } else if (word1.length >= 2 && word2.length >= 2) { // Lowered from 3 to catch more truncated words
           // Check for partial word matches (e.g., "Hidden" matches "Hidden Brain")
           if (word1.startsWith(word2) || word2.startsWith(word1)) {
-            partialWordMatches += 0.6;
+            partialWordMatches += 0.6; // Increased from 0.5 for better partial matching
           }
         }
       }
@@ -429,14 +339,14 @@ class ApplePodcastsService {
     
     const wordSimilarity = totalMatches / totalWords;
     
-    // Boost score for partial matches when we have some exact matches
+    // NEW: Boost score for partial matches when we have some exact matches
     if (exactWordMatches > 0 && partialWordMatches > 0) {
-      return Math.min(1, wordSimilarity + 0.15);
+      return Math.min(1, wordSimilarity + 0.15); // Increased boost for mixed matches
     }
     
-    // Additional boost for cases where we have good partial matches even without exact matches
+    // NEW: Additional boost for cases where we have good partial matches even without exact matches
     if (partialWordMatches > 0 && partialWordMatches >= words1.length * 0.5) {
-      return Math.min(1, wordSimilarity + 0.1);
+      return Math.min(1, wordSimilarity + 0.1); // Boost for good partial match coverage
     }
     
     return wordSimilarity;
