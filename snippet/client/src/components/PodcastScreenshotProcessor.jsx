@@ -370,8 +370,10 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
 
   // Modal handlers
   const handleScreenshotClick = (index) => {
+    console.log('handleScreenshotClick called with index:', index);
     setSelectedScreenshotIndex(index);
     setIsEditModalOpen(true);
+    console.log('Modal state set to open');
   };
 
   const handleModalUpdate = (updatedData) => {

@@ -160,6 +160,7 @@ const ScreenshotEditModal = ({
     timestampCandidates.push(screenshotData.secondPass.timestamp);
   }
 
+  console.log('ScreenshotEditModal render:', { isOpen, screenshotData: !!screenshotData });
   if (!isOpen) return null;
 
   return (
