@@ -82,7 +82,7 @@ class VisionService {
       
       // Extract structured information
       const candidates = this.extractTextCandidates(detections);
-      const timestamp = this.extractTimestamp(fullText, detections);
+      const timestamp = this.extractTimestamp(detections);
       
       logger.info(`Found ${candidates.length} text candidates`);
       
@@ -286,14 +286,6 @@ class VisionService {
   isValidCandidate(line) {
     const text = line.text.toLowerCase().trim();
     const originalText = line.text.trim();
-    
-    // STRICTER SIZE FILTERING: Prevent small thumbnail text
-    // Text must be substantial enough to be main podcast/episode titles
-    const minTextArea = 1200; // Increased from default to exclude small thumbnails
-    if (line.avgArea < minTextArea) {
-      logger.debug(`📱 Excluding small text: "${originalText}" (area: ${line.avgArea})`);
-      return false;
-    }
     
     // Basic length and word count filters - be more lenient for single words
     if (text.length < this.config.minCandidateLength || 
@@ -611,21 +603,72 @@ class VisionService {
             validation.validatedPodcast?.confidence >= this.config.validationConfidenceThreshold) {
           logger.info(`Individual podcast validation successful: ${candidate.text}`);
           
-          // Try to find episode from remaining candidates
-          const episodeCandidate = await this.findBestEpisodeForPodcast(
-            validation.validatedPodcast,
-            candidates.filter(c => c.text !== candidate.text)
-          );
+          // Find the closest candidate directly above or below (Y-axis only)
+          const otherCandidates = candidates.filter(c => c.text !== candidate.text);
+          const episodeCandidate = this.findClosestVerticalCandidate(candidate, otherCandidates);
           
-                  return {
+          if (episodeCandidate) {
+            logger.info(`Found closest vertical candidate: "${episodeCandidate.text}" (${Math.abs(episodeCandidate.avgY - candidate.avgY)}px away)`);
+            
+            // Try to validate this episode with the podcast
+            const episodeValidation = await applePodcastsService.validatePodcastInfo(
+              validation.validatedPodcast.title,
+              episodeCandidate.text
+            );
+            
+            if (episodeValidation.validated && episodeValidation.validatedEpisode) {
+              // Exact episode match found
+              return {
+                podcastTitle: validation.validatedPodcast.title,
+                episodeTitle: episodeValidation.validatedEpisode.title,
+                confidence: Math.min(validation.confidence, episodeValidation.confidence),
+                validation: {
+                  validated: true,
+                  method: 'individual_podcast_with_episode',
+                  validatedPodcast: validation.validatedPodcast,
+                  validatedEpisode: episodeValidation.validatedEpisode
+                },
+                player: 'validated'
+              };
+            } else {
+              // Try fuzzy episode search
+              const fuzzyResult = await this.fuzzySearchEpisode(
+                validation.validatedPodcast,
+                episodeCandidate.text
+              );
+              
+              if (fuzzyResult.success) {
+                return {
+                  podcastTitle: validation.validatedPodcast.title,
+                  episodeTitle: fuzzyResult.episodeTitle,
+                  confidence: Math.min(validation.confidence, fuzzyResult.confidence),
+                  validation: {
+                    validated: true,
+                    method: 'individual_podcast_with_fuzzy_episode',
+                    validatedPodcast: validation.validatedPodcast,
+                    validatedEpisode: {
+                      id: fuzzyResult.episodeId,
+                      title: fuzzyResult.episodeTitle,
+                      artworkUrl: fuzzyResult.artworkUrl,
+                      confidence: fuzzyResult.confidence
+                    }
+                  },
+                  player: 'validated'
+                };
+              }
+            }
+          }
+          
+          // Fallback: return podcast with unknown episode
+          return {
             podcastTitle: validation.validatedPodcast.title,
-            episodeTitle: episodeCandidate?.title || 'Unknown Episode',
+            episodeTitle: 'Unknown Episode',
             confidence: validation.confidence,
             validation: validation,
             player: 'validated'
-                  };
-                }
-              } catch (error) {
+          };
+        }
+      } catch (error) {
         logger.debug(`Individual podcast validation error for ${candidate.text}:`, error.message);
       }
     }
@@ -786,6 +829,33 @@ class VisionService {
     }
     
     return matrix[str2.length][str1.length];
+  }
+
+  // Find the closest candidate directly above or below (Y-axis only)
+  findClosestVerticalCandidate(targetCandidate, otherCandidates) {
+    if (!otherCandidates || otherCandidates.length === 0) return null;
+    
+    const targetY = targetCandidate.avgY;
+    const maxVerticalDistance = 100; // Same as spatial pairing
+    
+    // Find candidates within vertical distance
+    const nearbyVerticalCandidates = otherCandidates.filter(candidate => {
+      const distance = Math.abs(candidate.avgY - targetY);
+      return distance <= maxVerticalDistance && distance > 0; // Exclude same position
+    });
+    
+    if (nearbyVerticalCandidates.length === 0) return null;
+    
+    // Sort by vertical distance (closest first)
+    nearbyVerticalCandidates.sort((a, b) => {
+      const distanceA = Math.abs(a.avgY - targetY);
+      const distanceB = Math.abs(b.avgY - targetY);
+      return distanceA - distanceB;
+    });
+    
+    logger.debug(`Found ${nearbyVerticalCandidates.length} vertical candidates for "${targetCandidate.text}"`);
+    
+    return nearbyVerticalCandidates[0]; // Return the closest one
   }
 
   async validateSpatialPair(podcastCandidate, episodeCandidate, pairType) {
@@ -1055,118 +1125,91 @@ class VisionService {
       .slice(0, 8); // Limit to top 8 keywords to avoid noise
   }
 
-  extractTimestamp(fullText, textAnnotations) {
-    // Extract time patterns that look like podcast timestamps
+  extractTimestamp(textAnnotations) {
+    if (!textAnnotations || textAnnotations.length === 0) return null;
+    
+    const fullText = textAnnotations[0].description;
+    const individualTexts = textAnnotations.slice(1);
+    
+    // Group words into lines and apply the same 50%-87.5% position filtering
+    const lines = this.groupWordsIntoLines(individualTexts);
+    const filteredLines = this.filterByPosition(lines);
+    
+    // Extract time patterns from filtered lines only
     const timeRegex = /\b(\d{1,2}:\d{2}(?::\d{2})?)\b/g;
-    const allMatches = [...fullText.matchAll(timeRegex)];
+    const candidateTimestamps = [];
     
-    if (allMatches.length === 0) return null;
-    
-    // Calculate position filtering boundaries (same as text candidates)
-    const lines = this.groupWordsIntoLines(textAnnotations.slice(1));
-    if (lines.length === 0) return null;
-    
-    const maxY = Math.max(...lines.map(line => line.avgY));
-    const minY = Math.min(...lines.map(line => line.avgY));
-    const imageHeight = maxY - minY;
-    
-    // Apply same position filtering as text candidates: 50%-87.5% primary area
-    const primaryStartY = minY + (imageHeight * 0.50);
-    const primaryEndY = minY + (imageHeight * 0.875);
-    
-    // Find times that are in the correct position area
-    const positionFilteredTimes = allMatches.filter(match => {
-      const time = match[0];
-      const timeIndex = match.index;
-      
-      // Find the Y position of this time by looking at text annotations
-      let timeY = null;
-      for (const word of textAnnotations.slice(1)) {
-        const wordText = word.description;
-        const wordStart = fullText.indexOf(wordText, timeIndex - 20);
-        const wordEnd = wordStart + wordText.length;
-        
-        // If this word contains or is near our timestamp
-        if (wordStart <= timeIndex && timeIndex <= wordEnd + 5) {
-          timeY = word.boundingPoly.vertices[0].y;
-          break;
-        }
-      }
-      
-      // If we can't find position, exclude (likely system clock)
-      if (timeY === null) return false;
-      
-      // Apply position filtering - must be in content area
-      if (timeY < primaryStartY || timeY > primaryEndY) {
-        logger.debug(`📱 Excluding timestamp "${time}" outside content area (Y: ${timeY}, range: ${primaryStartY}-${primaryEndY})`);
-        return false;
-      }
-      
-      return true;
-    }).map(match => match[0]);
-    
-    // Context-based filtering for remaining times
-    const podcastTimes = positionFilteredTimes.filter(time => {
-      // Strategy 1: Context analysis
-      const timeIndex = fullText.indexOf(time);
-      const context = fullText.substring(
-        Math.max(0, timeIndex - 30), 
-        timeIndex + time.length + 30
-      ).toLowerCase();
-      
-      // Exclude if context suggests it's a clock time
-      const clockContextIndicators = [
-        /\b(morning|afternoon|evening|night|mañana|tarde|noche)\b/,
-        /\b(today|tomorrow|yesterday|hoy|mañana|ayer)\b/,
-        /\b(scheduled|programado|optimizada|recarga)\b/,
-        /\b(wi-fi|wifi|battery|batería)\b/ // System status indicators
-      ];
-      
-      const hasClockContext = clockContextIndicators.some(pattern => pattern.test(context));
-      if (hasClockContext) {
-        logger.debug(`📱 Excluding timestamp "${time}" with clock context`);
-        return false;
-      }
-      
-      // IMPORTANT: Exclude if this time appears with a negative sign
-      // We only want positive timestamps (current position), not remaining time
-      if (fullText.includes('-' + time)) {
-        logger.debug(`📱 Excluding negative timestamp "-${time}"`);
-        return false;
-      }
-      
-      return true;
+    filteredLines.forEach(line => {
+      const matches = [...line.text.matchAll(timeRegex)];
+      matches.forEach(match => {
+        candidateTimestamps.push({
+          time: match[0],
+          line: line,
+          y: line.avgY,
+          area: line.avgArea
+        });
+      });
     });
     
-    // Additional filtering: prefer times that look like podcast progress
-    const likelyPodcastTimes = podcastTimes.filter(time => {
-      const timeIndex = fullText.indexOf(time);
-      const nearbyText = fullText.substring(
-        Math.max(0, timeIndex - 50),
-        timeIndex + time.length + 50
-      );
-      
-      // Check for progress-like context (multiple times, progress bars)
-      const timeCount = (nearbyText.match(/\d{1,2}:\d{2}/g) || []).length;
-      if (timeCount >= 2) { // Multiple times nearby suggests progress display
-        return true;
-      }
-      
-      // Single time in podcast player context is also good
-      return true;
-    });
-    
-    // Return the first valid positive podcast timestamp
-    const finalTimes = likelyPodcastTimes.length > 0 ? likelyPodcastTimes : podcastTimes;
-    const selectedTime = finalTimes.length > 0 ? finalTimes[0] : null;
-    
-    if (selectedTime) {
-      logger.info(`📱 Selected timestamp: "${selectedTime}" from ${allMatches.length} total time patterns`);
-    } else {
-      logger.info(`📱 No valid timestamp found from ${allMatches.length} total time patterns`);
+    if (candidateTimestamps.length === 0) {
+      // Fallback: extract from full text but still filter clock times
+      const allTimes = [...fullText.matchAll(timeRegex)].map(m => m[0]);
+      return this.filterClockTimes(allTimes, fullText);
     }
     
-    return selectedTime;
+    // Filter out clock times and UI timestamps
+    const podcastTimestamps = candidateTimestamps.filter(candidate => {
+      // Exclude very large text (likely clock display)
+      if (candidate.area > 5000) {
+        return false;
+      }
+      
+      // Exclude negative timestamps (remaining time)
+      if (fullText.includes('-' + candidate.time)) {
+        return false;
+      }
+      
+      // Context analysis for this specific timestamp
+      const context = this.getTimestampContext(fullText, candidate.time);
+      return !this.hasClockContext(context);
+    });
+    
+    // Sort by Y position (prefer timestamps lower on screen in content area)
+    podcastTimestamps.sort((a, b) => b.y - a.y);
+    
+    return podcastTimestamps.length > 0 ? podcastTimestamps[0].time : null;
+  }
+  
+  filterClockTimes(times, fullText) {
+    const filteredTimes = times.filter(time => {
+      // Exclude negative timestamps
+      if (fullText.includes('-' + time)) {
+        return false;
+      }
+      
+      const context = this.getTimestampContext(fullText, time);
+      return !this.hasClockContext(context);
+    });
+    
+    return filteredTimes.length > 0 ? filteredTimes[0] : null;
+  }
+  
+  getTimestampContext(fullText, time) {
+    const timeIndex = fullText.indexOf(time);
+    return fullText.substring(
+      Math.max(0, timeIndex - 30), 
+      timeIndex + time.length + 30
+    ).toLowerCase();
+  }
+  
+  hasClockContext(context) {
+    const clockContextIndicators = [
+      /\b(morning|afternoon|evening|night|mañana|tarde|noche)\b/,
+      /\b(today|tomorrow|yesterday|hoy|mañana|ayer)\b/,
+      /\b(scheduled|programado|optimizada|recarga)\b/
+    ];
+    
+    return clockContextIndicators.some(pattern => pattern.test(context));
   }
 }
 
