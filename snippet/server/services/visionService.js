@@ -133,6 +133,18 @@ class VisionService {
           
           // Get all potential title candidates from debug info
           const allCandidates = podcastInfo.debug?.titleCandidates || [];
+          
+          // NEW: Debug what candidates are being passed to fallback
+          logger.info('=== CANDIDATES FOR FALLBACK VALIDATION ===');
+          allCandidates.forEach((candidate, index) => {
+            logger.info(`Candidate ${index}: "${candidate.text}" (Y=${candidate.avgY}, area=${candidate.avgArea}, words=${candidate.wordCount})`);
+            
+            // Check for problematic candidates
+            if (candidate.text.toLowerCase().includes('75') || candidate.text.toLowerCase().includes('de carga')) {
+              logger.info(`⚠️  PROBLEMATIC CANDIDATE: "${candidate.text}" - This should not be in candidates!`);
+            }
+          });
+          
           const fallbackResult = await this.tryFallbackValidation(
             podcastInfo.podcastTitle,
             podcastInfo.episodeTitle,
@@ -318,6 +330,11 @@ class VisionService {
     logger.info('=== ALL DETECTED LINES ===');
     joinedLines.forEach((line, index) => {
       logger.info(`Line ${index}: "${line.text}" (Y=${line.avgY}, X=${line.avgX}, area=${line.avgArea}, words=${line.wordCount})`);
+      
+      // NEW: Check for problematic text
+      if (line.text.toLowerCase().includes('75') || line.text.toLowerCase().includes('de carga')) {
+        logger.info(`⚠️  PROBLEMATIC TEXT DETECTED: "${line.text}" - This should be filtered out!`);
+      }
     });
     
     // CONSERVATIVE: Focus on the middle section (30%-80%) to avoid UI elements
@@ -387,7 +404,7 @@ class VisionService {
       // Filter out battery and system status text
       const systemText = ['%', 'de carga', 'battery', 'wifi', 'signal', 'spectrum', 'lock', 'unlock'];
       if (systemText.some(text => description.includes(text))) {
-        logger.info(`  → FILTERED: System text detected`);
+        logger.info(`  → FILTERED: System text detected (matched: ${systemText.find(text => description.includes(text))})`);
         return false;
       }
       
@@ -1376,36 +1393,117 @@ class VisionService {
       return 0;
     });
     
-    // Try each combination and return the first one that validates with decent confidence
+    // NEW: Systematic validation approach
+    // 1. First, identify the podcast with high confidence
+    // 2. Then systematically test episode candidates against that podcast
+    
+    logger.info('=== SYSTEMATIC VALIDATION APPROACH ===');
+    
+    // Step 1: Find the best podcast candidate
+    let bestPodcast = null;
+    let bestPodcastConfidence = 0;
+    
     for (const combo of combinations) {
+      if (!combo.podcast) continue;
+      
       try {
-        logger.info(`Trying combination: podcast="${combo.podcast}", episode="${combo.episode}" (${combo.source})`);
+        logger.info(`Testing podcast candidate: "${combo.podcast}"`);
+        const podcastValidation = await applePodcastsService.validatePodcastInfo(combo.podcast, null);
         
-        const validation = await applePodcastsService.validatePodcastInfo(
-          combo.podcast,
-          combo.episode
-        );
-        
-        // Accept if confidence is >= 0.6 (lower threshold for fallback)
-        if (validation.validated && validation.confidence >= 0.6) {
-          logger.info(`Fallback validation successful with confidence ${validation.confidence}: ${combo.source}`);
-          return {
-            success: true,
-            validatedPodcast: validation.validatedPodcast.title,
-            validatedEpisode: validation.validatedEpisode?.title || combo.episode,
-            validation: validation,
-            fallbackSource: combo.source
-          };
-        } else if (validation.confidence >= 0.5) {
-          // Store as a potential match but keep trying for better ones
-          logger.info(`Potential fallback match with confidence ${validation.confidence}: ${combo.source}`);
+        if (podcastValidation.validated && podcastValidation.validatedPodcast?.confidence > bestPodcastConfidence) {
+          bestPodcast = podcastValidation.validatedPodcast;
+          bestPodcastConfidence = podcastValidation.validatedPodcast.confidence;
+          logger.info(`New best podcast: "${bestPodcast.title}" (confidence: ${bestPodcastConfidence})`);
         }
-        
       } catch (error) {
-        logger.error(`Error trying fallback combination ${combo.source}:`, error);
-        // Continue to next combination
+        logger.error(`Error testing podcast candidate "${combo.podcast}":`, error);
       }
     }
+    
+    if (!bestPodcast || bestPodcastConfidence < 0.7) {
+      logger.info('No high-confidence podcast found, falling back to original approach');
+      
+      // Fall back to original approach for low-confidence cases
+      for (const combo of combinations) {
+        try {
+          logger.info(`Trying combination: podcast="${combo.podcast}", episode="${combo.episode}" (${combo.source})`);
+          
+          const validation = await applePodcastsService.validatePodcastInfo(
+            combo.podcast,
+            combo.episode
+          );
+          
+          // Accept if confidence is >= 0.6 (lower threshold for fallback)
+          if (validation.validated && validation.confidence >= 0.6) {
+            logger.info(`Fallback validation successful with confidence ${validation.confidence}: ${combo.source}`);
+            return {
+              success: true,
+              validatedPodcast: validation.validatedPodcast.title,
+              validatedEpisode: validation.validatedEpisode?.title || combo.episode,
+              validation: validation,
+              fallbackSource: combo.source
+            };
+          }
+        } catch (error) {
+          logger.error(`Error trying fallback combination ${combo.source}:`, error);
+        }
+      }
+      
+      logger.info('No successful fallback validation found');
+      return { success: false };
+    }
+    
+    // Step 2: Now systematically test episode candidates against the identified podcast
+    logger.info(`Systematically testing episode candidates against podcast: "${bestPodcast.title}"`);
+    
+    // Get all valid episode candidates
+    const validEpisodeCandidates = candidates
+      .filter(c => isValidEpisodeCandidate(c.text))
+      .map(c => c.text);
+    
+    logger.info(`Valid episode candidates: ${validEpisodeCandidates.join(', ')}`);
+    
+    // Test each episode candidate
+    for (const episodeCandidate of validEpisodeCandidates) {
+      try {
+        logger.info(`Testing episode candidate: "${episodeCandidate}" against podcast "${bestPodcast.title}"`);
+        
+        const episodeValidation = await applePodcastsService.validatePodcastInfo(
+          bestPodcast.title,
+          episodeCandidate
+        );
+        
+        if (episodeValidation.validated && episodeValidation.validatedEpisode?.confidence >= 0.4) {
+          logger.info(`✅ Episode validation successful: "${episodeCandidate}" → "${episodeValidation.validatedEpisode.title}"`);
+          return {
+            success: true,
+            validatedPodcast: bestPodcast.title,
+            validatedEpisode: episodeValidation.validatedEpisode.title,
+            validation: episodeValidation,
+            fallbackSource: `systematic_validation: ${bestPodcast.title} + ${episodeCandidate}`
+          };
+        } else {
+          logger.info(`❌ Episode validation failed: "${episodeCandidate}" (confidence: ${episodeValidation.validatedEpisode?.confidence || 0})`);
+        }
+      } catch (error) {
+        logger.error(`Error testing episode candidate "${episodeCandidate}":`, error);
+      }
+    }
+    
+    // If no episode validation succeeded, return just the podcast
+    logger.info(`No episode validation succeeded, returning podcast-only result: "${bestPodcast.title}"`);
+    return {
+      success: true,
+      validatedPodcast: bestPodcast.title,
+      validatedEpisode: 'Unknown Episode',
+      validation: {
+        validated: true,
+        confidence: bestPodcastConfidence,
+        validatedPodcast: bestPodcast,
+        validatedEpisode: null
+      },
+      fallbackSource: `systematic_validation_podcast_only: ${bestPodcast.title}`
+    };
     
     logger.info('No successful fallback validation found');
     return {
