@@ -3,6 +3,7 @@ import { CloudArrowUpIcon } from '@heroicons/react/24/outline';
 import TimeRangeSelector from './TimeRangeSelector';
 import TimeRangeSelection from './TimeRangeSelection';
 import TextSelection from './TextSelection';
+import ScreenshotEditModal from './ScreenshotEditModal';
 import { processScreenshots, getTranscript } from '../services/api';
 
 function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
@@ -18,6 +19,8 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   });
   const [showNewUI, setShowNewUI] = useState(true); // Always start with new UI
   const [processedEpisodeCount, setProcessedEpisodeCount] = useState(0); // Track how many episodes have been processed
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedScreenshotIndex, setSelectedScreenshotIndex] = useState(null);
 
   // Process initial files when component mounts
   useEffect(() => {
@@ -365,6 +368,77 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     );
   }
 
+  // Modal handlers
+  const handleScreenshotClick = (index) => {
+    setSelectedScreenshotIndex(index);
+    setIsEditModalOpen(true);
+  };
+
+  const handleModalUpdate = (updatedData) => {
+    // Update the podcast info with the new data
+    if (selectedScreenshotIndex !== null && podcastInfo?.data) {
+      const updatedPodcastInfo = { ...podcastInfo };
+      const screenshotData = updatedPodcastInfo.data[selectedScreenshotIndex];
+      
+      // Update the validation data
+      if (updatedData.podcast) {
+        screenshotData.validation = {
+          ...screenshotData.validation,
+          validatedPodcast: updatedData.podcast
+        };
+        screenshotData.secondPass = {
+          ...screenshotData.secondPass,
+          podcastTitle: updatedData.podcast.title
+        };
+      }
+      
+      if (updatedData.episode) {
+        screenshotData.validation = {
+          ...screenshotData.validation,
+          validatedEpisode: updatedData.episode
+        };
+        screenshotData.secondPass = {
+          ...screenshotData.secondPass,
+          episodeTitle: updatedData.episode.title
+        };
+      }
+      
+      if (updatedData.timestamp) {
+        screenshotData.secondPass = {
+          ...screenshotData.secondPass,
+          timestamp: updatedData.timestamp
+        };
+      }
+      
+      setPodcastInfo(updatedPodcastInfo);
+    }
+  };
+
+  const handleModalDelete = () => {
+    if (selectedScreenshotIndex !== null) {
+      // Remove the file and preview
+      const updatedFiles = files.filter((_, index) => index !== selectedScreenshotIndex);
+      const updatedPreviews = previews.filter((_, index) => index !== selectedScreenshotIndex);
+      
+      setFiles(updatedFiles);
+      setPreviews(updatedPreviews);
+      
+      // Remove the podcast info
+      if (podcastInfo?.data) {
+        const updatedPodcastInfo = { ...podcastInfo };
+        updatedPodcastInfo.data = updatedPodcastInfo.data.filter((_, index) => index !== selectedScreenshotIndex);
+        setPodcastInfo(updatedPodcastInfo);
+      }
+      
+      // Remove the transcript
+      if (transcripts[selectedScreenshotIndex]) {
+        const updatedTranscripts = { ...transcripts };
+        delete updatedTranscripts[selectedScreenshotIndex];
+        setTranscripts(updatedTranscripts);
+      }
+    }
+  };
+
   // Show new UI when requested (even without files initially)
   if (showNewUI) {
     return (
@@ -373,6 +447,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           screenshots={screenshots}
           onAddScreenshots={handleAddScreenshots}
           onGenerateTranscript={handleGenerateTranscript}
+          onScreenshotClick={handleScreenshotClick}
           isProcessing={isProcessing}
         />
         
@@ -752,6 +827,18 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           )}
         </div>
       </div>
+
+      {/* Screenshot Edit Modal */}
+      <ScreenshotEditModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        screenshotData={selectedScreenshotIndex !== null && podcastInfo?.data ? {
+          ...podcastInfo.data[selectedScreenshotIndex],
+          preview: previews[selectedScreenshotIndex]
+        } : null}
+        onUpdate={handleModalUpdate}
+        onDelete={handleModalDelete}
+      />
     </div>
   );
 }

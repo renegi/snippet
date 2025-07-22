@@ -6,6 +6,7 @@ const MainContent = ({
   screenshots = [],
   onAddScreenshots,
   onGenerateTranscript,
+  onScreenshotClick,
   isProcessing = false,
   processingProgress = 0,
   processingStage = "Processing..."
@@ -280,7 +281,11 @@ const MainContent = ({
             }
 
             return (
-              <div key={index} className="self-stretch flex flex-row items-center justify-start gap-2">
+              <div 
+                key={index} 
+                className="self-stretch flex flex-row items-center justify-start gap-2 cursor-pointer hover:bg-gray-50 rounded-lg p-2 transition-colors"
+                onClick={() => onScreenshotClick && onScreenshotClick(index)}
+              >
                 <img
                   className="w-14 relative rounded-xl h-14 overflow-hidden shrink-0 object-cover"
                   alt={`Podcast thumbnail ${index + 1}`}

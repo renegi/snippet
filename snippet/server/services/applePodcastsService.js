@@ -157,6 +157,41 @@ class ApplePodcastsService {
     }
   }
 
+  async searchMultiplePodcasts(searchTerm) {
+    try {
+      const encodedTerm = encodeURIComponent(searchTerm);
+      const url = `${this.baseUrl}/search?term=${encodedTerm}&entity=podcast&limit=10`;
+
+      logger.info(`Searching multiple podcasts for term: "${searchTerm}"`);
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const results = data.results || [];
+
+      logger.info(`Apple Podcasts search returned ${results.length} results for "${searchTerm}"`);
+
+      // Return all results as podcast objects
+      const podcasts = results.map(result => ({
+        id: result.collectionId,
+        title: result.collectionName,
+        artistName: result.artistName,
+        feedUrl: result.feedUrl,
+        artworkUrl: result.artworkUrl100 || result.artworkUrl600,
+        confidence: this.calculateSimilarity(searchTerm, result.collectionName)
+      }));
+
+      return { podcasts };
+
+    } catch (error) {
+      logger.error('Error searching multiple podcasts:', error);
+      return { podcasts: [], error: error.message };
+    }
+  }
+
   async searchEpisode(episodeTitle, podcastId) {
     try {
       if (!podcastId) {
@@ -206,6 +241,54 @@ class ApplePodcastsService {
         validatedEpisode: null,
         error: error.message
       };
+    }
+  }
+
+  async searchMultipleEpisodes(podcastId, searchTerm) {
+    try {
+      if (!podcastId) {
+        return { episodes: [] };
+      }
+
+      const url = `${this.baseUrl}/lookup?id=${podcastId}&entity=podcastEpisode&limit=200`;
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const results = data.results || [];
+
+      logger.info(`Apple Podcasts lookup returned ${results.length} episodes for podcast ${podcastId}`);
+
+      if (results.length === 0) {
+        return { episodes: [] };
+      }
+
+      // Filter episodes that match the search term
+      const matchingEpisodes = results
+        .filter(episode => {
+          const similarity = this.calculateSimilarity(searchTerm, episode.trackName);
+          return similarity > 0.1; // Lower threshold for search results
+        })
+        .map(episode => ({
+          id: episode.trackId,
+          title: episode.trackName,
+          description: episode.description,
+          duration: episode.trackTimeMillis,
+          artworkUrl: episode.artworkUrl100 || episode.artworkUrl600,
+          releaseDate: episode.releaseDate,
+          confidence: this.calculateSimilarity(searchTerm, episode.trackName)
+        }))
+        .sort((a, b) => b.confidence - a.confidence) // Sort by confidence
+        .slice(0, 10); // Limit to top 10 results
+
+      return { episodes: matchingEpisodes };
+
+    } catch (error) {
+      logger.error('Error searching multiple episodes:', error);
+      return { episodes: [], error: error.message };
     }
   }
 

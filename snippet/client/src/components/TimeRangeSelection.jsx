@@ -6,6 +6,7 @@ const TimeRangeSelection = ({
   screenshots,
   onAddScreenshots,
   onGenerateTranscript,
+  onScreenshotClick,
   isProcessing = false
 }) => {
   const [showTranscript, setShowTranscript] = useState(false);
@@ -161,6 +162,7 @@ const TimeRangeSelection = ({
         screenshots={screenshots}
         onAddScreenshots={onAddScreenshots}
         onGenerateTranscript={handleGenerateTranscript}
+        onScreenshotClick={onScreenshotClick}
         isProcessing={localIsProcessing || isProcessing}
         processingProgress={processingProgress}
         processingStage={processingStage}

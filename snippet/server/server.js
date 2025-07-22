@@ -6,6 +6,7 @@ const fs = require('fs');
 const { errorHandler } = require('./middleware/errorHandler');
 const extractRouter = require('./api/extractRouter');
 const transcriptRouter = require('./api/transcriptRouter');
+const searchRouter = require('./api/searchRouter');
 const logger = require('./utils/logger');
 
 const app = express();
@@ -65,6 +66,7 @@ app.use(express.static(buildPath));
 // API Routes
 app.use('/api/extract', extractRouter);
 app.use('/api/transcript', transcriptRouter);
+app.use('/api', searchRouter);
 
 // Serve React app for all other routes (React Router)
 app.get('*', (req, res) => {
