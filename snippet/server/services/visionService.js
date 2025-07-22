@@ -78,6 +78,21 @@ class VisionService {
         const y = vertices[0].y;
         logger.info(`${index}: "${detection.description}" at Y=${y}`);
       });
+      
+      // NEW: Check if "Search Engine" is in the full text
+      if (fullText.toLowerCase().includes('search engine')) {
+        logger.info('✅ "Search Engine" found in full OCR text!');
+      } else {
+        logger.info('❌ "Search Engine" NOT found in full OCR text');
+      }
+      
+      // NEW: Check if "Audacy" is in the full text
+      if (fullText.toLowerCase().includes('audacy')) {
+        logger.info('✅ "Audacy" found in full OCR text!');
+      } else {
+        logger.info('❌ "Audacy" NOT found in full OCR text');
+      }
+      
       logger.info('=== END DEBUG ===');
       
       // Extract podcast information using positioning data
@@ -312,6 +327,13 @@ class VisionService {
     
     logger.info(`Primary detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
     
+    // NEW: Debug which lines are being filtered out by detection area
+    logger.info('=== DETECTION AREA FILTERING ===');
+    joinedLines.forEach((line, index) => {
+      const inRange = line.avgY >= bottomThreshold && line.avgY <= topThreshold;
+      logger.info(`Line ${index}: "${line.text}" (Y=${line.avgY}) - ${inRange ? '✅ IN RANGE' : '❌ OUT OF RANGE'}`);
+    });
+    
     // If we don't find enough candidates, expand the range slightly
     if (bottomLines.length < 2) {
       bottomThreshold = maxY * (2 / 5); // Start at 40%
@@ -438,6 +460,13 @@ class VisionService {
       
       logger.info(`  → KEPT: Candidate accepted`);
       return true;
+    });
+
+    // NEW: Debug what was filtered out
+    logger.info('=== TITLE CANDIDATE FILTERING SUMMARY ===');
+    bottomLines.forEach((line, index) => {
+      const wasKept = titleCandidates.some(candidate => candidate.text === line.text);
+      logger.info(`Line "${line.text}" - ${wasKept ? '✅ KEPT' : '❌ FILTERED OUT'}`);
     });
 
     // DEBUG: Log title candidates

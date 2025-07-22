@@ -118,7 +118,7 @@ class ApplePodcastsService {
       // Find the best match
       const bestMatch = this.findBestMatch(podcastTitle, results);
       
-      logger.info(`Best match for "${podcastTitle}": "${bestMatch?.result.collectionName}" (similarity: ${bestMatch?.similarity.toFixed(3)})`);
+      logger.info(`Best match for "${podcastTitle}": "${bestMatch?.result?.collectionName || 'none'}" (similarity: ${bestMatch?.similarity?.toFixed(3) || 'undefined'})`);
       
       if (bestMatch && bestMatch.similarity > 0.7) {
         logger.info(`Validating podcast "${podcastTitle}" as "${bestMatch.result.collectionName}" (similarity: ${bestMatch.similarity.toFixed(3)} >= 0.7)`);
@@ -138,7 +138,7 @@ class ApplePodcastsService {
         };
       }
 
-      logger.info(`Podcast "${podcastTitle}" validation failed (similarity: ${bestMatch?.similarity.toFixed(3)} < 0.7)`);
+      logger.info(`Podcast "${podcastTitle}" validation failed (similarity: ${bestMatch?.similarity?.toFixed(3) || 'undefined'} < 0.7)`);
       return {
         validatedPodcast: null,
         suggestions: results.slice(0, 3).map(r => ({
@@ -209,20 +209,68 @@ class ApplePodcastsService {
     }
   }
 
+  // NEW: Add the missing searchEpisodes function
+  async searchEpisodes(podcastId, episodeTitle) {
+    try {
+      if (!podcastId) {
+        return { episodes: [] };
+      }
+
+      const url = `${this.baseUrl}/lookup?id=${podcastId}&entity=podcastEpisode&limit=50`;
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const results = data.results || [];
+
+      // If episodeTitle is provided, filter and rank by similarity
+      if (episodeTitle) {
+        const rankedEpisodes = results
+          .map(episode => ({
+            ...episode,
+            similarity: this.calculateSimilarity(episodeTitle, episode.trackName || '')
+          }))
+          .filter(episode => episode.similarity > 0.3) // Filter out very low matches
+          .sort((a, b) => b.similarity - a.similarity);
+
+        return { episodes: rankedEpisodes };
+      }
+
+      // If no episodeTitle, return all episodes
+      return { episodes: results };
+
+    } catch (error) {
+      logger.error('Error searching episodes:', error);
+      return {
+        episodes: [],
+        error: error.message
+      };
+    }
+  }
+
   findBestMatch(searchTerm, results) {
     let bestMatch = null;
     let bestSimilarity = 0;
+
+    logger.info(`Finding best match for "${searchTerm}" among ${results.length} results`);
 
     for (const result of results) {
       const title = result.collectionName || result.trackName || '';
       const similarity = this.calculateSimilarity(searchTerm, title);
       
+      logger.info(`  Comparing "${searchTerm}" with "${title}" → similarity: ${similarity.toFixed(3)}`);
+      
       if (similarity > bestSimilarity) {
         bestSimilarity = similarity;
         bestMatch = { result, similarity };
+        logger.info(`  → New best match: "${title}" (similarity: ${similarity.toFixed(3)})`);
       }
     }
 
+    logger.info(`Final best match: ${bestMatch ? `"${bestMatch.result.collectionName || bestMatch.result.trackName}" (similarity: ${bestMatch.similarity.toFixed(3)})` : 'none'}`);
     return bestMatch;
   }
 
