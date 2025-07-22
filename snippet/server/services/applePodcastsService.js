@@ -39,11 +39,19 @@ class ApplePodcastsService {
       if (podcastResult?.validatedPodcast) {
         confidence += 0.6;
         validated = true;
+        logger.info(`Podcast validation SUCCESS: "${podcastTitle}" → "${podcastResult.validatedPodcast.title}" (confidence: ${podcastResult.validatedPodcast.confidence})`);
+      } else {
+        logger.info(`Podcast validation FAILED: "${podcastTitle}" not found in Apple Podcasts`);
       }
 
       if (episodeResult?.validatedEpisode) {
         confidence += 0.4;
+        logger.info(`Episode validation SUCCESS: "${episodeTitle}" → "${episodeResult.validatedEpisode.title}" (confidence: ${episodeResult.validatedEpisode.confidence})`);
+      } else if (episodeTitle) {
+        logger.info(`Episode validation FAILED: "${episodeTitle}" not found in podcast "${podcastResult?.validatedPodcast?.title}"`);
       }
+
+      logger.info(`Final validation result: validated=${validated}, confidence=${confidence.toFixed(3)}`);
 
       return {
         validated,
@@ -68,6 +76,8 @@ class ApplePodcastsService {
       const searchTerm = encodeURIComponent(podcastTitle);
       const url = `${this.baseUrl}/search?term=${searchTerm}&entity=podcast&limit=5`;
 
+      logger.info(`Searching for podcast: "${podcastTitle}" with URL: ${url}`);
+
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -76,7 +86,13 @@ class ApplePodcastsService {
       const data = await response.json();
       const results = data.results || [];
 
+      logger.info(`Apple Podcasts search returned ${results.length} results for "${podcastTitle}":`);
+      results.forEach((result, index) => {
+        logger.info(`  ${index + 1}. "${result.collectionName}" by ${result.artistName} (similarity: ${this.calculateSimilarity(podcastTitle, result.collectionName).toFixed(3)})`);
+      });
+
       if (results.length === 0) {
+        logger.info(`No results found for "${podcastTitle}"`);
         return {
           validatedPodcast: null,
           suggestions: []
@@ -86,13 +102,17 @@ class ApplePodcastsService {
       // Find the best match
       const bestMatch = this.findBestMatch(podcastTitle, results);
       
+      logger.info(`Best match for "${podcastTitle}": "${bestMatch?.result.collectionName}" (similarity: ${bestMatch?.similarity.toFixed(3)})`);
+      
       if (bestMatch && bestMatch.similarity > 0.7) {
+        logger.info(`Validating podcast "${podcastTitle}" as "${bestMatch.result.collectionName}" (similarity: ${bestMatch.similarity.toFixed(3)} >= 0.7)`);
         return {
           validatedPodcast: {
             id: bestMatch.result.collectionId,
             title: bestMatch.result.collectionName,
             artist: bestMatch.result.artistName,
-            feedUrl: bestMatch.result.feedUrl
+            feedUrl: bestMatch.result.feedUrl,
+            confidence: bestMatch.similarity
           },
           suggestions: results.slice(0, 3).map(r => ({
             title: r.collectionName,
@@ -102,6 +122,7 @@ class ApplePodcastsService {
         };
       }
 
+      logger.info(`Podcast "${podcastTitle}" validation failed (similarity: ${bestMatch?.similarity.toFixed(3)} < 0.7)`);
       return {
         validatedPodcast: null,
         suggestions: results.slice(0, 3).map(r => ({
