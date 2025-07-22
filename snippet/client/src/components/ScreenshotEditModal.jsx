@@ -255,6 +255,12 @@ const ScreenshotEditModal = ({
                     onChange={(e) => setPodcastSearchTerm(e.target.value)}
                     placeholder="Search for a podcast..."
                     className="w-full px-4 py-3 pr-12 border border-[#DDDAD1] rounded-[16px] focus:outline-none focus:ring-2 focus:ring-[#1B1B1B] focus:border-[#1B1B1B] bg-white text-[#1B1B1B] font-['Termina']"
+                    onFocus={(e) => {
+                      // Scroll the input to the top of the screen
+                      setTimeout(() => {
+                        e.target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }, 100);
+                    }}
                   />
                   {selectedPodcast?.artworkUrl && (
                     <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
@@ -271,32 +277,32 @@ const ScreenshotEditModal = ({
                     </div>
                   )}
                 </div>
+                
+                {/* Podcast Dropdown - positioned relative to input */}
+                {showPodcastDropdown && podcastOptions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-2 bg-white border border-[#DDDAD1] rounded-[16px] shadow-lg max-h-60 overflow-auto" style={{ width: '100%', maxWidth: '100%', top: '100%', left: 0 }}>
+                    {podcastOptions.map((podcast) => (
+                      <button
+                        key={podcast.id}
+                        onClick={() => handlePodcastSelect(podcast)}
+                        className="w-full px-4 py-3 text-left hover:bg-[#E4E0D2] flex items-center space-x-3 transition-colors"
+                      >
+                        {podcast.artworkUrl && (
+                          <img
+                            src={podcast.artworkUrl}
+                            alt=""
+                            className="w-10 h-10 rounded-[12px] object-cover"
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-[#1B1B1B] font-['Termina'] truncate">{podcast.title}</div>
+                          <div className="text-sm text-gray-500 font-['Termina'] truncate">{podcast.artistName}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              
-              {/* Podcast Dropdown */}
-              {showPodcastDropdown && podcastOptions.length > 0 && (
-                <div className="absolute z-10 w-full mt-2 bg-white border border-[#DDDAD1] rounded-[16px] shadow-lg max-h-60 overflow-auto" style={{ width: '100%', maxWidth: '100%' }}>
-                  {podcastOptions.map((podcast) => (
-                    <button
-                      key={podcast.id}
-                      onClick={() => handlePodcastSelect(podcast)}
-                      className="w-full px-4 py-3 text-left hover:bg-[#E4E0D2] flex items-center space-x-3 transition-colors"
-                    >
-                      {podcast.artworkUrl && (
-                        <img
-                          src={podcast.artworkUrl}
-                          alt=""
-                          className="w-10 h-10 rounded-[12px] object-cover"
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-[#1B1B1B] font-['Termina'] truncate">{podcast.title}</div>
-                        <div className="text-sm text-gray-500 font-['Termina'] truncate">{podcast.artistName}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* Episode Selection */}
@@ -314,38 +320,44 @@ const ScreenshotEditModal = ({
                   className={`w-full px-4 py-3 border border-[#DDDAD1] rounded-[16px] focus:outline-none focus:ring-2 focus:ring-[#1B1B1B] focus:border-[#1B1B1B] bg-white text-[#1B1B1B] font-['Termina'] ${
                     !selectedPodcast ? 'bg-[#E4E0D2] cursor-not-allowed opacity-50' : ''
                   }`}
+                  onFocus={(e) => {
+                    // Scroll the input to the top of the screen
+                    setTimeout(() => {
+                      e.target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                  }}
                 />
                 {isLoadingEpisodes && (
                   <div className="absolute right-4 top-3">
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#1B1B1B]"></div>
                   </div>
                 )}
+                
+                {/* Episode Dropdown - positioned relative to input */}
+                {showEpisodeDropdown && episodeOptions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-2 bg-white border border-[#DDDAD1] rounded-[16px] shadow-lg max-h-60 overflow-auto" style={{ width: '100%', maxWidth: '100%', top: '100%', left: 0 }}>
+                    {episodeOptions.map((episode) => (
+                      <button
+                        key={episode.id}
+                        onClick={() => handleEpisodeSelect(episode)}
+                        className="w-full px-4 py-3 text-left hover:bg-[#E4E0D2] flex items-center space-x-3 transition-colors"
+                      >
+                        {episode.artworkUrl && (
+                          <img
+                            src={episode.artworkUrl}
+                            alt=""
+                            className="w-10 h-10 rounded-[12px] object-cover"
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-[#1B1B1B] font-['Termina'] truncate">{episode.title}</div>
+                          <div className="text-sm text-gray-500 font-['Termina'] truncate">{episode.releaseDate}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              
-              {/* Episode Dropdown */}
-              {showEpisodeDropdown && episodeOptions.length > 0 && (
-                <div className="absolute z-10 w-full mt-2 bg-white border border-[#DDDAD1] rounded-[16px] shadow-lg max-h-60 overflow-auto" style={{ width: '100%', maxWidth: '100%' }}>
-                  {episodeOptions.map((episode) => (
-                    <button
-                      key={episode.id}
-                      onClick={() => handleEpisodeSelect(episode)}
-                      className="w-full px-4 py-3 text-left hover:bg-[#E4E0D2] flex items-center space-x-3 transition-colors"
-                    >
-                      {episode.artworkUrl && (
-                        <img
-                          src={episode.artworkUrl}
-                          alt=""
-                          className="w-10 h-10 rounded-[12px] object-cover"
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-[#1B1B1B] font-['Termina'] truncate">{episode.title}</div>
-                        <div className="text-sm text-gray-500 font-['Termina'] truncate">{episode.releaseDate}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* Timestamp Selection */}
