@@ -377,10 +377,16 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   };
 
   const handleModalUpdate = (updatedData) => {
+    console.log('handleModalUpdate called with:', updatedData);
+    console.log('selectedScreenshotIndex:', selectedScreenshotIndex);
+    console.log('podcastInfo:', podcastInfo);
+    
     // Update the podcast info with the new data
     if (selectedScreenshotIndex !== null && podcastInfo?.data) {
       const updatedPodcastInfo = { ...podcastInfo };
       const screenshotData = updatedPodcastInfo.data[selectedScreenshotIndex];
+      
+      console.log('Original screenshot data:', screenshotData);
       
       // Update the validation data
       if (updatedData.podcast) {
@@ -392,6 +398,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           ...screenshotData.secondPass,
           podcastTitle: updatedData.podcast.title
         };
+        console.log('Updated podcast:', updatedData.podcast.title);
       }
       
       if (updatedData.episode) {
@@ -403,6 +410,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           ...screenshotData.secondPass,
           episodeTitle: updatedData.episode.title
         };
+        console.log('Updated episode:', updatedData.episode.title);
       }
       
       if (updatedData.timestamp) {
@@ -410,9 +418,14 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           ...screenshotData.secondPass,
           timestamp: updatedData.timestamp
         };
+        console.log('Updated timestamp:', updatedData.timestamp);
       }
       
+      console.log('Updated screenshot data:', screenshotData);
       setPodcastInfo(updatedPodcastInfo);
+      console.log('PodcastInfo state updated');
+    } else {
+      console.log('Cannot update: selectedScreenshotIndex or podcastInfo missing');
     }
   };
 

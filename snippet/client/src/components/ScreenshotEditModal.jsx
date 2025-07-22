@@ -27,11 +27,21 @@ const ScreenshotEditModal = ({
   // Initialize form with existing data
   useEffect(() => {
     if (screenshotData) {
-      setSelectedPodcast(screenshotData.validation?.validatedPodcast || null);
-      setSelectedEpisode(screenshotData.validation?.validatedEpisode || null);
-      setSelectedTimestamp(screenshotData.secondPass?.timestamp || screenshotData.firstPass?.timestamp || '');
-      setPodcastSearchTerm(screenshotData.secondPass?.podcastTitle || screenshotData.firstPass?.podcastTitle || '');
-      setEpisodeSearchTerm(screenshotData.secondPass?.episodeTitle || screenshotData.firstPass?.episodeTitle || '');
+      const podcast = screenshotData.validation?.validatedPodcast || null;
+      const episode = screenshotData.validation?.validatedEpisode || null;
+      const timestamp = screenshotData.secondPass?.timestamp || screenshotData.firstPass?.timestamp || '';
+      const podcastTitle = screenshotData.secondPass?.podcastTitle || screenshotData.firstPass?.podcastTitle || '';
+      const episodeTitle = screenshotData.secondPass?.episodeTitle || screenshotData.firstPass?.episodeTitle || '';
+      
+      setSelectedPodcast(podcast);
+      setSelectedEpisode(episode);
+      setSelectedTimestamp(timestamp);
+      setPodcastSearchTerm(podcastTitle);
+      setEpisodeSearchTerm(episodeTitle);
+      
+      // Close dropdowns when data is prefilled
+      setShowPodcastDropdown(false);
+      setShowEpisodeDropdown(false);
     }
   }, [screenshotData]);
 
@@ -125,6 +135,7 @@ const ScreenshotEditModal = ({
     setEpisodeSearchTerm('');
     setSelectedEpisode(null);
     setEpisodeOptions([]);
+    setShowEpisodeDropdown(false);
   };
 
   const handleEpisodeSelect = (episode) => {
@@ -160,6 +171,11 @@ const ScreenshotEditModal = ({
       screenshotData.secondPass.timestamp !== screenshotData.firstPass?.timestamp) {
     timestampCandidates.push(screenshotData.secondPass.timestamp);
   }
+  
+  // Add any additional timestamps found in the data
+  if (screenshotData?.timestamp && !timestampCandidates.includes(screenshotData.timestamp)) {
+    timestampCandidates.push(screenshotData.timestamp);
+  }
 
   console.log('ScreenshotEditModal render:', { isOpen, screenshotData: !!screenshotData });
   if (!isOpen) return null;
@@ -177,7 +193,7 @@ const ScreenshotEditModal = ({
         <div className="w-full h-[90vh] bg-[#F6F4EE] rounded-t-[24px] shadow-xl transform transition-all duration-300 ease-out flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-[#DDDAD1]">
-            <h2 className="text-xl font-semibold text-[#1B1B1B] font-['Termina']">Edit Screenshot</h2>
+            <h2 className="text-xl font-semibold text-[#1B1B1B] font-['Termina']">Edit screenshot</h2>
             <button
               onClick={onClose}
               className="text-[#1B1B1B] hover:text-gray-600 p-2 rounded-full hover:bg-[#E4E0D2] transition-colors"
@@ -204,21 +220,32 @@ const ScreenshotEditModal = ({
             {/* Podcast Selection */}
             <div className="space-y-3">
               <label className="block text-base font-medium text-[#1B1B1B] font-['Termina']">
-                Podcast Name *
+                Podcast Name
               </label>
               <div className="relative">
-                <input
-                  type="text"
-                  value={podcastSearchTerm}
-                  onChange={(e) => setPodcastSearchTerm(e.target.value)}
-                  placeholder="Search for a podcast..."
-                  className="w-full px-4 py-3 border border-[#DDDAD1] rounded-[16px] focus:outline-none focus:ring-2 focus:ring-[#1B1B1B] focus:border-[#1B1B1B] bg-white text-[#1B1B1B] font-['EB_Garamond']"
-                />
-                {isLoadingPodcasts && (
-                  <div className="absolute right-4 top-3">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#1B1B1B]"></div>
-                  </div>
-                )}
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={podcastSearchTerm}
+                    onChange={(e) => setPodcastSearchTerm(e.target.value)}
+                    placeholder="Search for a podcast..."
+                    className="w-full px-4 py-3 pr-12 border border-[#DDDAD1] rounded-[16px] focus:outline-none focus:ring-2 focus:ring-[#1B1B1B] focus:border-[#1B1B1B] bg-white text-[#1B1B1B] font-['Termina']"
+                  />
+                  {selectedPodcast?.artworkUrl && (
+                    <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                      <img
+                        src={selectedPodcast.artworkUrl}
+                        alt=""
+                        className="w-8 h-8 rounded-[8px] object-cover"
+                      />
+                    </div>
+                  )}
+                  {isLoadingPodcasts && (
+                    <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#1B1B1B]"></div>
+                    </div>
+                  )}
+                </div>
               </div>
               
               {/* Podcast Dropdown */}
@@ -239,7 +266,7 @@ const ScreenshotEditModal = ({
                       )}
                       <div>
                         <div className="font-medium text-[#1B1B1B] font-['Termina']">{podcast.title}</div>
-                        <div className="text-sm text-gray-500 font-['EB_Garamond']">{podcast.artistName}</div>
+                        <div className="text-sm text-gray-500 font-['Termina']">{podcast.artistName}</div>
                       </div>
                     </button>
                   ))}
@@ -250,7 +277,7 @@ const ScreenshotEditModal = ({
             {/* Episode Selection */}
             <div className="space-y-3">
               <label className="block text-base font-medium text-[#1B1B1B] font-['Termina']">
-                Episode Name *
+                Episode Name
               </label>
               <div className="relative">
                 <input
@@ -259,7 +286,7 @@ const ScreenshotEditModal = ({
                   onChange={(e) => setEpisodeSearchTerm(e.target.value)}
                   placeholder={selectedPodcast ? "Search for an episode..." : "Select a podcast first"}
                   disabled={!selectedPodcast}
-                  className={`w-full px-4 py-3 border border-[#DDDAD1] rounded-[16px] focus:outline-none focus:ring-2 focus:ring-[#1B1B1B] focus:border-[#1B1B1B] bg-white text-[#1B1B1B] font-['EB_Garamond'] ${
+                  className={`w-full px-4 py-3 border border-[#DDDAD1] rounded-[16px] focus:outline-none focus:ring-2 focus:ring-[#1B1B1B] focus:border-[#1B1B1B] bg-white text-[#1B1B1B] font-['Termina'] ${
                     !selectedPodcast ? 'bg-[#E4E0D2] cursor-not-allowed opacity-50' : ''
                   }`}
                 />
@@ -288,7 +315,7 @@ const ScreenshotEditModal = ({
                       )}
                       <div>
                         <div className="font-medium text-[#1B1B1B] font-['Termina']">{episode.title}</div>
-                        <div className="text-sm text-gray-500 font-['EB_Garamond']">{episode.releaseDate}</div>
+                        <div className="text-sm text-gray-500 font-['Termina']">{episode.releaseDate}</div>
                       </div>
                     </button>
                   ))}
@@ -297,17 +324,17 @@ const ScreenshotEditModal = ({
             </div>
 
             {/* Timestamp Selection */}
-            {timestampCandidates.length > 0 && (
-              <div className="space-y-3">
-                <label className="block text-base font-medium text-[#1B1B1B] font-['Termina']">
-                  Timestamp
-                </label>
+            <div className="space-y-3">
+              <label className="block text-base font-medium text-[#1B1B1B] font-['Termina']">
+                Timestamp
+              </label>
+              {timestampCandidates.length > 0 ? (
                 <div className="flex flex-wrap gap-3">
                   {timestampCandidates.map((timestamp, index) => (
                     <button
                       key={index}
                       onClick={() => setSelectedTimestamp(timestamp)}
-                      className={`px-4 py-2 text-sm rounded-[12px] border transition-colors font-['EB_Garamond'] ${
+                      className={`px-4 py-2 text-sm rounded-[12px] border transition-colors font-['Termina'] ${
                         selectedTimestamp === timestamp
                           ? 'bg-[#1B1B1B] border-[#1B1B1B] text-white'
                           : 'bg-white border-[#DDDAD1] text-[#1B1B1B] hover:bg-[#E4E0D2]'
@@ -317,8 +344,12 @@ const ScreenshotEditModal = ({
                     </button>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="text-sm text-gray-500 font-['Termina']">
+                  No timestamps detected
+                </div>
+              )}
+            </div>
 
             {/* Delete Button */}
             <div className="pt-6 border-t border-[#DDDAD1]">
@@ -336,7 +367,7 @@ const ScreenshotEditModal = ({
           <div className="bg-[#F6F4EE] border-t border-[#DDDAD1] p-6 flex gap-4">
             <button
               onClick={handleCancel}
-              className="h-16 rounded-[24px] bg-[#DDDAD1] transition-colors overflow-hidden flex flex-row items-center justify-center py-[18px] px-6 box-border text-left text-base text-[#1B1B1B] font-['Termina']"
+              className="flex-1 h-16 rounded-[24px] bg-[#DDDAD1] transition-colors overflow-hidden flex flex-row items-center justify-center py-[18px] px-6 box-border text-left text-base text-[#1B1B1B] font-['Termina']"
             >
               <b className="relative leading-[125%]">Cancel</b>
             </button>
