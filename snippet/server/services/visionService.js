@@ -702,7 +702,17 @@ class VisionService {
               validated: true,
               method: `spatial_pair_${pairType}_exact`,
               podcastCandidate: podcastCandidate.text,
-              episodeCandidate: episodeCandidate.text
+              episodeCandidate: episodeCandidate.text,
+              validatedPodcast: {
+                id: podcastValidation.validatedPodcast.id,
+                title: podcastValidation.validatedPodcast.title,
+                confidence: podcastValidation.validatedPodcast.confidence
+              },
+              validatedEpisode: {
+                id: exactEpisodeValidation.validatedEpisode.id,
+                title: exactEpisodeValidation.validatedEpisode.title,
+                confidence: exactEpisodeValidation.validatedEpisode.confidence
+              }
             },
             player: 'validated'
                       };
@@ -730,7 +740,17 @@ class VisionService {
             method: `spatial_pair_${pairType}_fuzzy`,
             podcastCandidate: podcastCandidate.text,
             episodeCandidate: episodeCandidate.text,
-            fuzzyMatch: true
+            fuzzyMatch: true,
+            validatedPodcast: {
+              id: podcastValidation.validatedPodcast.id,
+              title: podcastValidation.validatedPodcast.title,
+              confidence: podcastValidation.validatedPodcast.confidence
+            },
+            validatedEpisode: {
+              id: fuzzyResult.episodeId,
+              title: fuzzyResult.episodeTitle,
+              confidence: fuzzyResult.confidence
+            }
           },
           player: 'validated'
         };
@@ -799,6 +819,7 @@ class VisionService {
     return {
           success: true,
           episodeTitle: bestMatch.episode.trackName,
+          episodeId: bestMatch.episode.trackId,
           confidence: 0.5 + (bestMatch.matchScore * 0.3), // 0.5-0.8 confidence range
           matchScore: bestMatch.matchScore,
           matchedKeywords: bestMatch.matchedKeywords,
