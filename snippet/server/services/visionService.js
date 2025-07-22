@@ -144,6 +144,8 @@ class VisionService {
   filterByPosition(lines) {
     if (lines.length === 0) return lines;
     
+    logger.info('📱 Mobile Debug: Position filtering - input lines:', lines.map(l => `"${l.text}" (Y:${l.avgY}, area:${l.avgArea})`));
+    
     // Calculate image dimensions
     const maxY = Math.max(...lines.map(line => line.avgY));
     const minY = Math.min(...lines.map(line => line.avgY));
@@ -152,52 +154,59 @@ class VisionService {
       line.words ? Math.max(...line.words.map(w => w.boundingPoly.vertices[1].x)) : 0
     ));
     
-    // More aggressive filtering to avoid album art and focus on UI text areas
-    // Exclude top 30% (status bar, clock, album art area) and bottom 10% (home indicator)
-    const excludeTopThreshold = minY + (imageHeight * 0.3);
-    const excludeBottomThreshold = maxY - (imageHeight * 0.1);
+    logger.info('📱 Mobile Debug: Image dimensions:', { minY, maxY, imageHeight, imageWidth });
     
-    // Also exclude areas that are likely within album art (center-heavy content)
+    // Much more lenient filtering - only exclude obvious system text areas
+    // Exclude top 15% (status bar, clock) and bottom 5% (home indicator)
+    const excludeTopThreshold = minY + (imageHeight * 0.15);
+    const excludeBottomThreshold = maxY - (imageHeight * 0.05);
+    
+    // Much smaller album art region
     const centerX = imageWidth / 2;
-    const albumArtRegion = imageWidth * 0.3; // 30% around center is likely album art
+    const albumArtRegion = imageWidth * 0.15; // 15% around center (was 30%)
     
     const positionFiltered = lines.filter(line => {
-      // Filter by vertical position
+      // Filter by vertical position - much more lenient
       if (line.avgY < excludeTopThreshold || line.avgY > excludeBottomThreshold) {
+        logger.info(`📱 Mobile Debug: Filtered out "${line.text}" - vertical position (Y:${line.avgY})`);
         return false;
       }
       
-      // Filter by horizontal position if we can determine avgX
+      // Filter by horizontal position - much more lenient
       if (line.avgX && Math.abs(line.avgX - centerX) < albumArtRegion) {
-        // Text near center is likely album art - exclude unless it's clearly UI text
-        // UI text is usually smaller and more structured
-        if (line.avgArea > 2000) { // Large text in center = likely album art
+        // Only exclude very large text in center (likely album art)
+        if (line.avgArea > 5000) { // Much higher threshold (was 2000)
+          logger.info(`📱 Mobile Debug: Filtered out "${line.text}" - center album art (area:${line.avgArea})`);
           return false;
         }
       }
       
-      // Extra filtering for large text in upper areas (likely clock or album art titles)
-      if (line.avgY < excludeTopThreshold * 1.2 && line.avgArea > 2000) {
+      // Extra filtering for very large text in upper areas - much more lenient
+      if (line.avgY < excludeTopThreshold * 1.5 && line.avgArea > 8000) { // Much higher threshold (was 2000)
+        logger.info(`📱 Mobile Debug: Filtered out "${line.text}" - upper area large text (Y:${line.avgY}, area:${line.avgArea})`);
         return false;
       }
       
       return true;
     });
     
-    // If we filtered out too much, be more lenient but still exclude obvious problem areas
-    if (positionFiltered.length < 3) {
-      const lenientExcludeTop = minY + (imageHeight * 0.2);
-      return lines.filter(line => {
-        // Still exclude very large text in upper area (clock/album art)
-        if (line.avgY < lenientExcludeTop && line.avgArea > 3000) {
+    logger.info('📱 Mobile Debug: Position filtered lines:', positionFiltered.map(l => `"${l.text}" (Y:${l.avgY}, area:${l.avgArea})`));
+    
+    // If we filtered out too much, be very lenient
+    if (positionFiltered.length < 2) {
+      logger.info('📱 Mobile Debug: Too few lines after position filtering, using very lenient fallback');
+      const veryLenientExcludeTop = minY + (imageHeight * 0.1); // Only exclude top 10%
+      const veryLenientFiltered = lines.filter(line => {
+        // Only exclude very obvious system text
+        if (line.avgY < veryLenientExcludeTop && line.avgArea > 10000) { // Very high threshold
+          logger.info(`📱 Mobile Debug: Very lenient filtered out "${line.text}" - obvious system text`);
           return false;
         }
-        // Still exclude center album art area for large text
-        if (line.avgX && Math.abs(line.avgX - centerX) < albumArtRegion && line.avgArea > 2500) {
-          return false;
-        }
-        return line.avgY >= lenientExcludeTop;
+        return true;
       });
+      
+      logger.info('📱 Mobile Debug: Very lenient filtered lines:', veryLenientFiltered.map(l => `"${l.text}" (Y:${l.avgY}, area:${l.avgArea})`));
+      return veryLenientFiltered;
     }
     
     return positionFiltered;
@@ -255,19 +264,24 @@ class VisionService {
     const text = line.text.toLowerCase().trim();
     const originalText = line.text.trim();
     
+    logger.info(`📱 Mobile Debug: Testing candidate "${originalText}" (length:${text.length}, words:${line.wordCount}, area:${line.avgArea})`);
+    
     // Basic length and word count filters - be more lenient for single words
     if (text.length < this.config.minCandidateLength || 
         text.length > this.config.maxCandidateLength) {
+      logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - length (${text.length}) outside range [${this.config.minCandidateLength}-${this.config.maxCandidateLength}]`);
       return false;
     }
     
     // For word count: allow single words if they're substantial (like podcast names)
     if (line.wordCount < 1) {
+      logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - no words`);
       return false;
     }
     
     // If it's a single word, it should be substantial (not just a short word)
     if (line.wordCount === 1 && text.length < 6) {
+      logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - single word too short (${text.length} chars)`);
       return false;
     }
     
@@ -275,26 +289,31 @@ class VisionService {
     
     // 1. Time patterns (any language)
     if (this.isTimePattern(text)) {
+      logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - time pattern`);
       return false;
     }
     
     // 2. Date patterns (any language)
     if (this.isDatePattern(text)) {
+      logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - date pattern`);
       return false;
     }
     
     // 3. Percentage patterns
     if (/\b\d+%/.test(text)) {
+      logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - percentage pattern`);
       return false;
     }
     
     // 4. Pure numbers or symbols
     if (/^[\d\s\-:]+$/.test(text) || /^[^\w\s]+$/.test(text)) {
+      logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - pure numbers/symbols`);
       return false;
     }
     
     // 5. Single character or very short words
     if (/^.{1,2}$/.test(text.replace(/\s/g, ''))) {
+      logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - too short`);
       return false;
     }
     
@@ -304,6 +323,7 @@ class VisionService {
         originalText.length > 3 && 
         originalText.length < 15 && 
         line.wordCount <= 2) {
+      logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - short all caps UI element`);
       return false;
     }
     
@@ -312,6 +332,7 @@ class VisionService {
     if (/^[a-z]/.test(originalText)) {
       // Allow if it's substantial content (longer than 10 chars or contains meaningful words)
       if (text.length < 10 && !text.includes('market') && !text.includes('podcast') && !text.includes('episode')) {
+        logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - starts with lowercase, too short`);
         return false;
       }
     }
@@ -320,15 +341,18 @@ class VisionService {
     if (/\.{3,}|…/.test(text)) {
       // Allow if it's substantial content
       if (text.length < 15) {
+        logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - truncated, too short`);
         return false;
       }
     }
     
     // 9. Structural indicators of system text
     if (this.hasSystemTextStructure(text, line)) {
+      logger.info(`📱 Mobile Debug: Filtered out "${originalText}" - system text structure`);
       return false;
     }
     
+    logger.info(`📱 Mobile Debug: ACCEPTED candidate "${originalText}"`);
     return true;
   }
 
