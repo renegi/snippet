@@ -55,8 +55,15 @@ const ScreenshotEditModal = ({
       clearTimeout(podcastSearchTimeoutRef.current);
     }
 
-    // Don't search if we're just setting initial values
+    // Don't search if we're just setting initial values or if modal is not open
     if (podcastSearchTerm.length < 2 || !isOpen) {
+      setPodcastOptions([]);
+      setShowPodcastDropdown(false);
+      return;
+    }
+
+    // Don't search if the search term matches the selected podcast title (prevents auto-opening)
+    if (selectedPodcast && podcastSearchTerm === selectedPodcast.title) {
       setPodcastOptions([]);
       setShowPodcastDropdown(false);
       return;
@@ -88,7 +95,7 @@ const ScreenshotEditModal = ({
         clearTimeout(podcastSearchTimeoutRef.current);
       }
     };
-  }, [podcastSearchTerm, isOpen]);
+  }, [podcastSearchTerm, isOpen, selectedPodcast]);
 
   // Search episodes when podcast is selected
   useEffect(() => {
@@ -96,8 +103,15 @@ const ScreenshotEditModal = ({
       clearTimeout(episodeSearchTimeoutRef.current);
     }
 
-    // Don't search if we're just setting initial values
+    // Don't search if we're just setting initial values or if modal is not open
     if (!selectedPodcast || episodeSearchTerm.length < 2 || !isOpen) {
+      setEpisodeOptions([]);
+      setShowEpisodeDropdown(false);
+      return;
+    }
+
+    // Don't search if the search term matches the selected episode title (prevents auto-opening)
+    if (selectedEpisode && episodeSearchTerm === selectedEpisode.title) {
       setEpisodeOptions([]);
       setShowEpisodeDropdown(false);
       return;
@@ -132,7 +146,7 @@ const ScreenshotEditModal = ({
         clearTimeout(episodeSearchTimeoutRef.current);
       }
     };
-  }, [selectedPodcast, episodeSearchTerm]);
+  }, [selectedPodcast, episodeSearchTerm, isOpen, selectedEpisode]);
 
   const handlePodcastSelect = (podcast) => {
     setSelectedPodcast(podcast);
@@ -378,9 +392,9 @@ const ScreenshotEditModal = ({
           <div className="bg-[#F6F4EE] border-t border-[#DDDAD1] p-6 flex gap-4">
             <button
               onClick={handleCancel}
-              className="flex-1 h-16 rounded-[24px] bg-[#DDDAD1] transition-colors overflow-hidden flex flex-row items-center justify-center py-[18px] px-6 box-border text-left text-base text-[#1B1B1B] font-['Termina']"
+              className="flex-1 h-16 rounded-[24px] bg-[#DDDAD1] transition-colors overflow-hidden flex flex-row items-center justify-center py-[18px] px-6 box-border text-left text-lg text-[#1B1B1B] font-['Termina']"
             >
-              <b className="relative leading-[125%]">Cancel</b>
+              <b className="relative leading-[130%]">Cancel</b>
             </button>
             
             <PrimaryButtonL
