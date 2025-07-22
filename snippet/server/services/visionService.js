@@ -337,9 +337,9 @@ class VisionService {
       }
     });
     
-    // CONSERVATIVE: Focus on the middle section (30%-80%) to avoid UI elements
-    let bottomThreshold = maxY * (3 / 10); // Start at 30% (avoid status bar and battery info)
-    let topThreshold = maxY * (8 / 10); // End at 80% (avoid bottom controls)
+    // CORRECT: Focus on the middle section (50%-87.5%) to avoid UI elements
+    let bottomThreshold = maxY * (5 / 10); // Start at 50% (avoid status bar and battery info)
+    let topThreshold = maxY * (7 / 8); // End at 87.5% (avoid bottom controls)
     let bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
     
     logger.info(`Primary detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
@@ -351,16 +351,17 @@ class VisionService {
       logger.info(`Line ${index}: "${line.text}" (Y=${line.avgY}) - ${inRange ? '✅ IN RANGE' : '❌ OUT OF RANGE'}`);
     });
     
-    // If we don't find enough candidates, expand slightly but still be conservative
+    // If we don't find enough candidates, expand to 10%-87.5% as fallback
     if (bottomLines.length < 2) {
-      bottomThreshold = maxY * (2 / 10); // Start at 20% (still avoid status bar)
-      topThreshold = maxY * (85 / 100); // End at 85% (still avoid bottom controls)
+      bottomThreshold = maxY * (1 / 10); // Start at 10% (include more content)
+      topThreshold = maxY * (7 / 8); // End at 87.5% (still avoid bottom controls)
       bottomLines = joinedLines.filter(line => line.avgY >= bottomThreshold && line.avgY <= topThreshold);
-      logger.info(`Expanded detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
+      logger.info(`Fallback detection area: Y=${bottomThreshold}-${topThreshold} (${Math.round((topThreshold - bottomThreshold) / maxY * 100)}% of screen height)`);
     }
 
     // DEBUG: Log lines in detection area
     logger.info('=== LINES IN DETECTION AREA ===');
+    logger.info(`bottomLines length: ${bottomLines.length}`);
     bottomLines.forEach((line, index) => {
       logger.info(`Detection area line ${index}: "${line.text}" (Y=${line.avgY}, X=${line.avgX}, area=${line.avgArea}, words=${line.wordCount})`);
     });
@@ -491,6 +492,12 @@ class VisionService {
       const wasKept = titleCandidates.some(candidate => candidate.text === line.text);
       logger.info(`Line "${line.text}" - ${wasKept ? '✅ KEPT' : '❌ FILTERED OUT'}`);
     });
+    
+    // NEW: Debug the candidates arrays
+    logger.info(`cleanedCandidates length: ${cleanedCandidates.length}`);
+    logger.info(`additionalCandidates length: ${additionalCandidates.length}`);
+    logger.info(`allCandidates length: ${allCandidates.length}`);
+    logger.info(`allCandidates contents: ${allCandidates.map(c => `"${c.text}"`).join(', ')}`);
 
     // DEBUG: Log title candidates
     logger.info('Title candidates:', JSON.stringify(titleCandidates, null, 2));
