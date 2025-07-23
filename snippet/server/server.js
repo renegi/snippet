@@ -12,6 +12,10 @@ const logger = require('./utils/logger');
 const app = express();
 const port = process.env.PORT || 3001;
 
+// Configure server timeouts for Render
+app.set('keepAliveTimeout', 120000); // 120 seconds
+app.set('headersTimeout', 120000); // 120 seconds
+
 // Debug: Log paths and check if build files exist
 const buildPath = path.join(__dirname, '../client/build');
 const indexPath = path.join(buildPath, 'index.html');
@@ -88,6 +92,6 @@ app.get('*', (req, res) => {
 app.use(errorHandler);
 
 // Start server
-app.listen(port, () => {
-  logger.info(`Server is running on port ${port}`);
+app.listen(port, '0.0.0.0', () => {
+  logger.info(`Server is running on port ${port} and bound to 0.0.0.0`);
 });
