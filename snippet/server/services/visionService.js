@@ -1336,7 +1336,7 @@ class VisionService {
 
   async validatePodcastWithEpisodeValidation(podcastText, episodeText) {
     try {
-      logger.info(`Starting simplified validation flow for podcast="${podcastText}" episode="${episodeText}"`);
+      logger.info(`🚀 NEW VALIDATION FLOW START for podcast="${podcastText}" episode="${episodeText}"`);
       
       // Step 1: Exact search
       logger.info(`Step 1: Trying exact podcast search for "${podcastText}"`);
@@ -1353,9 +1353,9 @@ class VisionService {
       }
       
       // Phase 1: Fuzzy podcast search of cleaned up text
-      logger.info(`Phase 1: Fuzzy podcast search of cleaned up text for "${podcastText}"`);
+      logger.info(`🚀 PHASE 1 START: Fuzzy podcast search of cleaned up text for "${podcastText}"`);
       const cleanedText = this.cleanTextForSearch(podcastText);
-      logger.info(`Cleaned text: "${cleanedText}"`);
+      logger.info(`🚀 Cleaned text: "${cleanedText}"`);
       
       const phase1Result = await this.searchPodcastsAndValidateEpisodes(cleanedText, episodeText, 'phase1_cleaned');
       if (phase1Result.success) {
@@ -1412,17 +1412,19 @@ class VisionService {
 
   async searchPodcastsAndValidateEpisodes(searchText, episodeText, phase) {
     try {
-      logger.info(`Searching podcasts with "${searchText}" (${phase})`);
+      logger.info(`🔍 SEARCH PODCASTS AND VALIDATE EPISODES CALLED with "${searchText}" (${phase})`);
       
       const searchResult = await applePodcastsService.searchPodcast(searchText);
       const podcasts = searchResult.results || [];
       
+      logger.info(`🔍 Apple Podcasts search returned ${podcasts.length} results for "${searchText}" (${phase})`);
+      
       if (podcasts.length === 0) {
-        logger.info(`No podcasts found for "${searchText}" (${phase})`);
+        logger.info(`🔍 No podcasts found for "${searchText}" (${phase})`);
         return { success: false };
       }
       
-      logger.info(`Found ${podcasts.length} podcasts for "${searchText}" (${phase})`);
+      logger.info(`🔍 Found ${podcasts.length} podcasts for "${searchText}" (${phase})`);
       
       // Calculate similarity scores and find high-confidence candidates
       const candidatesWithSimilarity = podcasts.map(podcast => {
