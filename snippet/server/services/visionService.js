@@ -1427,23 +1427,34 @@ class VisionService {
       // Calculate similarity scores and find high-confidence candidates
       const candidatesWithSimilarity = podcasts.map(podcast => {
         const similarity = applePodcastsService.calculateSimilarity(searchText, podcast.trackName);
+        logger.info(`  → Podcast: "${podcast.trackName}" (similarity: ${similarity.toFixed(3)})`);
         return {
           podcast,
           similarity: similarity,
           confidence: similarity
         };
-      }).filter(result => result.similarity >= 0.85) // Only high-confidence candidates
+      });
+      
+      logger.info(`All candidates before filtering: ${candidatesWithSimilarity.length}`);
+      
+      const highConfidenceCandidates = candidatesWithSimilarity
+        .filter(result => result.similarity >= 0.85) // Only high-confidence candidates
         .sort((a, b) => b.similarity - a.similarity);
       
-      if (candidatesWithSimilarity.length === 0) {
+      logger.info(`High-confidence candidates (>= 0.85): ${highConfidenceCandidates.length}`);
+      highConfidenceCandidates.forEach(c => {
+        logger.info(`  → High-confidence: "${c.podcast.trackName}" (similarity: ${c.similarity.toFixed(3)})`);
+      });
+      
+      if (highConfidenceCandidates.length === 0) {
         logger.info(`No high-confidence candidates (>= 0.85) found for "${searchText}" (${phase})`);
         return { success: false };
       }
       
-      logger.info(`Found ${candidatesWithSimilarity.length} high-confidence candidates (>= 0.85) for "${searchText}" (${phase}): ${candidatesWithSimilarity.map(c => `"${c.podcast.trackName}" (${c.similarity.toFixed(3)})`).join(', ')}`);
+      logger.info(`Found ${highConfidenceCandidates.length} high-confidence candidates (>= 0.85) for "${searchText}" (${phase}): ${highConfidenceCandidates.map(c => `"${c.podcast.trackName}" (${c.similarity.toFixed(3)})`).join(', ')}`);
       
       // Try episode validation with each high-confidence candidate
-      for (const candidate of candidatesWithSimilarity) {
+      for (const candidate of highConfidenceCandidates) {
         const validatedPodcast = {
           id: candidate.podcast.trackId,
           title: candidate.podcast.trackName,
@@ -1454,8 +1465,10 @@ class VisionService {
         
         const episodeResult = await this.tryEpisodeValidation(validatedPodcast, episodeText, phase);
         if (episodeResult.success) {
+          logger.info(`🎯 EPISODE VALIDATION SUCCESSFUL for "${validatedPodcast.title}" - returning result`);
           return episodeResult;
         }
+        logger.info(`🎯 Episode validation failed for "${validatedPodcast.title}", trying next candidate...`);
       }
       
       logger.info(`No episode validation successful for "${searchText}" (${phase})`);
@@ -1469,7 +1482,7 @@ class VisionService {
 
   async tryEpisodeValidation(validatedPodcast, episodeText, method) {
     try {
-      logger.info(`Trying episode validation (${method}) for podcast "${validatedPodcast.title}" with episode "${episodeText}"`);
+      logger.info(`🎯 EPISODE VALIDATION START (${method}) for podcast "${validatedPodcast.title}" with episode "${episodeText}"`);
       
       // Try exact episode validation first
       try {
@@ -1480,7 +1493,7 @@ class VisionService {
         
         if (exactEpisodeValidation.validated && 
             exactEpisodeValidation.validatedEpisode?.confidence >= 0.5) {
-          logger.info(`Exact episode validation successful (${method}): "${exactEpisodeValidation.validatedEpisode.title}"`);
+          logger.info(`🎯 EXACT EPISODE VALIDATION SUCCESS (${method}): "${exactEpisodeValidation.validatedEpisode.title}"`);
           return {
             success: true,
             podcastTitle: validatedPodcast.title,
@@ -1510,11 +1523,10 @@ class VisionService {
       }
       
       // Try fuzzy episode search
-      logger.info(`Trying fuzzy episode search (${method}) for podcast "${validatedPodcast.title}"`);
       const fuzzyResult = await this.fuzzySearchEpisode(validatedPodcast, episodeText);
       
       if (fuzzyResult.success) {
-        logger.info(`Fuzzy episode search successful (${method}): "${fuzzyResult.episodeTitle}"`);
+        logger.info(`🎯 FUZZY EPISODE VALIDATION SUCCESS (${method}): "${fuzzyResult.episodeTitle}"`);
         return {
           success: true,
           podcastTitle: validatedPodcast.title,
@@ -1541,7 +1553,7 @@ class VisionService {
         };
       }
       
-      logger.info(`Episode validation failed (${method}) for podcast "${validatedPodcast.title}" with episode "${episodeText}"`);
+      logger.info(`🎯 EPISODE VALIDATION FAILED (${method}) for podcast "${validatedPodcast.title}" with episode "${episodeText}"`);
       return { success: false };
       
     } catch (error) {
