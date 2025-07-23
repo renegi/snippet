@@ -157,9 +157,9 @@ class VisionService {
     
     logger.info(`📱 Mobile Debug: Image dimensions: ${imageWidth}x${imageHeight}`);
     
-    // PRIMARY STRATEGY: Focus on the podcast content area (50%-87.5% of screen height)
-    const primaryStartY = minY + (imageHeight * 0.50);  // 50% from top
-    const primaryEndY = minY + (imageHeight * 0.875);   // 87.5% from top
+    // PRIMARY STRATEGY: Focus on the podcast content area (30%-90% of screen height) - more inclusive
+    const primaryStartY = minY + (imageHeight * 0.30);  // 30% from top (was 50%)
+    const primaryEndY = minY + (imageHeight * 0.90);    // 90% from top (was 87.5%)
     
     const primaryFiltered = lines.filter(line => {
       // Must be in the primary content area
@@ -182,7 +182,7 @@ class VisionService {
       return true;
     });
     
-    logger.info(`📱 Mobile Debug: Primary area (50%-87.5%) filtered to ${primaryFiltered.length} lines`);
+    logger.info(`📱 Mobile Debug: Primary area (30%-90%) filtered to ${primaryFiltered.length} lines`);
     if (primaryFiltered.length > 0) {
       logger.info(`📱 Mobile Debug: Included lines:`, primaryFiltered.map(line => 
         `"${line.text}" (Y: ${line.avgY})`
@@ -194,10 +194,10 @@ class VisionService {
       return primaryFiltered;
     }
     
-    // FALLBACK STRATEGY: Search in 10%-20% area (upper content area)
-    logger.info('📱 Mobile Debug: Primary area insufficient, trying fallback area (10%-20%)');
+    // FALLBACK STRATEGY: Search in 10%-25% area (upper content area)
+    logger.info('📱 Mobile Debug: Primary area insufficient, trying fallback area (10%-25%)');
     const fallbackStartY = minY + (imageHeight * 0.10);  // 10% from top
-    const fallbackEndY = minY + (imageHeight * 0.20);    // 20% from top
+    const fallbackEndY = minY + (imageHeight * 0.25);    // 25% from top (was 20%)
     
     const fallbackFiltered = lines.filter(line => {
       // Must be in the fallback content area
@@ -213,7 +213,7 @@ class VisionService {
       return true;
     });
     
-    logger.info(`📱 Mobile Debug: Fallback area (10%-20%) filtered to ${fallbackFiltered.length} lines`);
+    logger.info(`📱 Mobile Debug: Fallback area (10%-25%) filtered to ${fallbackFiltered.length} lines`);
     
     // If fallback found candidates, use them
     if (fallbackFiltered.length >= 2) {
