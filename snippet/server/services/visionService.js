@@ -1092,69 +1092,42 @@ class VisionService {
         index === self.findIndex(p => p.trackId === podcast.trackId)
       );
       
-      logger.info(`Fuzzy searching ${uniquePodcasts.length} unique podcasts with keywords: [${keywords.join(', ')}]`);
+      logger.info(`Fuzzy searching ${uniquePodcasts.length} unique podcasts for similarity with "${podcastText}"`);
       
-      // Find podcasts that match multiple keywords with improved fuzzy matching
-      const matchingPodcasts = uniquePodcasts.map(podcast => {
-        const podcastTitle = podcast.trackName.toLowerCase();
-        const podcastArtist = podcast.artistName?.toLowerCase() || '';
-        const fullText = `${podcastTitle} ${podcastArtist}`;
-        
-        // Check for exact keyword matches in title
-        const exactMatches = keywords.filter(keyword => podcastTitle.includes(keyword));
-        
-        // Check for partial word matches (for truncated text)
-        const partialMatches = keywords.filter(keyword => {
-          const words = podcastTitle.split(/\s+/);
-          return words.some(word => word.startsWith(keyword) || keyword.startsWith(word));
-        });
-        
-        // Check for matches in artist name (for cases like "Where Should We Begin? with Esther Perel")
-        const artistMatches = keywords.filter(keyword => podcastArtist.includes(keyword));
-        
-        // Combine all matches, giving different weights
-        const totalMatches = exactMatches.length + (partialMatches.length * 0.7) + (artistMatches.length * 0.5);
-        const matchScore = totalMatches / keywords.length;
+      // Calculate similarity scores using Apple Podcasts matching logic
+      const candidatesWithSimilarity = uniquePodcasts.map(podcast => {
+        const similarity = applePodcastsService.calculateSimilarity(podcastText, podcast.trackName);
         
         return {
           podcast,
-          matchedKeywords: [...exactMatches, ...partialMatches.filter(k => !exactMatches.includes(k)), ...artistMatches.filter(k => !exactMatches.includes(k) && !partialMatches.includes(k))],
-          matchScore,
-          exactMatches: exactMatches.length,
-          partialMatches: partialMatches.length,
-          artistMatches: artistMatches.length
+          similarity: similarity,
+          confidence: similarity // Use similarity directly as confidence
         };
-      }).filter(result => result.matchScore >= 0.3) // Minimum 30% keyword match required
-        .sort((a, b) => b.matchScore - a.matchScore); // Best matches first
+      }).filter(result => result.similarity >= 0.3) // Keep reasonable matches
+        .sort((a, b) => b.similarity - a.similarity); // Best matches first
       
-      if (matchingPodcasts.length === 0) {
-        logger.info(`No podcasts found with match score >= 0.3`);
+      if (candidatesWithSimilarity.length === 0) {
+        logger.info(`No podcasts found with similarity >= 0.3`);
         return { success: false, candidates: [] };
       }
       
-      // Convert to candidate format for episode validation
-      const candidates = matchingPodcasts.map(match => ({
-        podcast: match.podcast,
-        confidence: 0.5 + (match.matchScore * 0.3), // 0.5-0.8 confidence range
-        matchScore: match.matchScore,
-        matchedKeywords: match.matchedKeywords,
-        exactMatches: match.exactMatches,
-        partialMatches: match.partialMatches,
-        artistMatches: match.artistMatches
-      }));
+      // Log details for debugging
+      candidatesWithSimilarity.forEach(candidate => {
+        logger.info(`Podcast candidate: "${candidate.podcast.trackName}" - similarity: ${candidate.similarity.toFixed(3)}, confidence: ${candidate.confidence.toFixed(3)}`);
+      });
       
-      // Find high-confidence candidates (>= 0.85)
-      const highConfidenceCandidates = candidates.filter(c => c.confidence >= 0.85);
+      // Find high-confidence candidates (>= 0.85 similarity)
+      const highConfidenceCandidates = candidatesWithSimilarity.filter(c => c.similarity >= 0.85);
       
       if (highConfidenceCandidates.length > 0) {
-        logger.info(`Found ${highConfidenceCandidates.length} high-confidence candidates (>= 0.85): ${highConfidenceCandidates.map(c => `"${c.podcast.trackName}" (${c.confidence.toFixed(3)})`).join(', ')}`);
+        logger.info(`Found ${highConfidenceCandidates.length} high-confidence candidates (>= 0.85): ${highConfidenceCandidates.map(c => `"${c.podcast.trackName}" (${c.similarity.toFixed(3)})`).join(', ')}`);
       }
       
       return {
         success: true,
-        candidates: candidates,
+        candidates: candidatesWithSimilarity,
         highConfidenceCandidates: highConfidenceCandidates,
-        bestMatch: candidates[0]
+        bestMatch: candidatesWithSimilarity[0]
       };
       
     } catch (error) {
