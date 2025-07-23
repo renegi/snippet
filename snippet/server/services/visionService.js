@@ -127,6 +127,10 @@ class VisionService {
     // Group words into lines
     const lines = this.groupWordsIntoLines(individualTexts);
     
+    logger.info(`📱 Mobile Debug: All lines before position filtering:`, lines.map(line => 
+      `"${line.text}" (Y: ${line.avgY}, X: ${line.words ? line.words[0].boundingPoly.vertices[0].x : 0}, Area: ${line.avgArea})`
+    ));
+    
     // Use position-based filtering to focus on podcast content area
     const filteredLines = this.filterByPosition(lines);
     
@@ -173,8 +177,10 @@ class VisionService {
       const albumArtRegion = imageWidth * 0.25; // 25% around center for album art
       const lineX = line.words ? line.words[0].boundingPoly.vertices[0].x : 0;
       
+      logger.debug(`📱 Checking album art exclusion for "${line.text}" - lineX: ${lineX}, centerX: ${centerX}, albumArtRegion: ${albumArtRegion}`);
+      
       if (Math.abs(lineX - centerX) < albumArtRegion) {
-        logger.debug(`📱 Excluding album art text: "${line.text}"`);
+        logger.debug(`📱 Excluding album art text: "${line.text}" (lineX: ${lineX}, distance from center: ${Math.abs(lineX - centerX)})`);
         return false;
       }
       
@@ -360,9 +366,12 @@ class VisionService {
       logger.debug(`📱 Rejecting "${originalText}" - area ${line.avgArea} < 500`);
       return false;
     }
+    
+    logger.debug(`📱 "${originalText}" passed area check (area: ${line.avgArea})`);
       
     // If it's a single word, it should be substantial (not just a short word)
     if (line.wordCount === 1 && text.length < 6) {
+        logger.debug(`📱 Rejecting "${originalText}" - single word too short (length: ${text.length})`);
         return false;
       }
       
