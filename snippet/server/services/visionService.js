@@ -157,9 +157,9 @@ class VisionService {
     
     logger.info(`📱 Mobile Debug: Image dimensions: ${imageWidth}x${imageHeight}`);
     
-    // PRIMARY STRATEGY: Focus on the podcast content area (50%-87.5% of screen height)
-    const primaryStartY = minY + (imageHeight * 0.50);  // 50% from top
-    const primaryEndY = minY + (imageHeight * 0.875);   // 87.5% from top
+    // PRIMARY STRATEGY: Focus on the podcast content area (25%-90% of screen height) - more inclusive
+    const primaryStartY = minY + (imageHeight * 0.25);  // 25% from top (was 50%)
+    const primaryEndY = minY + (imageHeight * 0.90);    // 90% from top (was 87.5%)
     
     const primaryFiltered = lines.filter(line => {
       // Must be in the primary content area
@@ -298,6 +298,22 @@ class VisionService {
     if (line.wordCount < 1) {
         return false;
       }
+      
+    // Exclude system UI text patterns
+    const systemUITexts = [
+      'recarga optimizada',
+      'el final de la recarga está programado',
+      'para las',
+      'sueño',
+      'wi-fi',
+      'miércoles',
+      'julio'
+    ];
+    
+    if (systemUITexts.some(systemText => text.includes(systemText))) {
+      logger.debug(`Excluding system UI text: "${originalText}"`);
+      return false;
+    }
       
     // If it's a single word, it should be substantial (not just a short word)
     if (line.wordCount === 1 && text.length < 6) {
@@ -701,15 +717,14 @@ class VisionService {
       }
     }
     
-    // Fallback: Return best candidates without validation
-    logger.info('No validation successful, returning best candidates');
-    const topCandidates = candidates.slice(0, 2);
+    // Fallback: No validation successful, return "Episode not found"
+    logger.info('No validation successful, returning "Episode not found"');
     
-            return {
-      podcastTitle: topCandidates[1]?.text || 'Unknown Podcast',
-      episodeTitle: topCandidates[0]?.text || 'Unknown Episode',
-                  confidence: 0.3,
-      validation: { validated: false, method: 'unvalidated_candidates' },
+    return {
+      podcastTitle: 'Episode not found',
+      episodeTitle: 'Episode not found',
+      confidence: 0.0,
+      validation: { validated: false, method: 'no_validation_successful' },
       player: 'unvalidated'
     };
   }
