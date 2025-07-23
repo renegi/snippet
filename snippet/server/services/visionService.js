@@ -157,13 +157,14 @@ class VisionService {
     
     logger.info(`📱 Mobile Debug: Image dimensions: ${imageWidth}x${imageHeight}`);
     
-    // PRIMARY STRATEGY: Focus on the podcast content area (25%-90% of screen height) - more inclusive
-    const primaryStartY = minY + (imageHeight * 0.25);  // 25% from top (was 50%)
-    const primaryEndY = minY + (imageHeight * 0.90);    // 90% from top (was 87.5%)
+    // PRIMARY STRATEGY: Focus on the podcast content area (50%-87.5% of screen height)
+    const primaryStartY = minY + (imageHeight * 0.50);  // 50% from top
+    const primaryEndY = minY + (imageHeight * 0.875);   // 87.5% from top
     
     const primaryFiltered = lines.filter(line => {
       // Must be in the primary content area
       if (line.avgY < primaryStartY || line.avgY > primaryEndY) {
+        logger.debug(`📱 Excluding line "${line.text}" - Y: ${line.avgY}, range: ${primaryStartY}-${primaryEndY}`);
         return false;
       }
       
@@ -177,10 +178,16 @@ class VisionService {
         return false;
       }
       
+      logger.debug(`📱 Including line "${line.text}" - Y: ${line.avgY}, range: ${primaryStartY}-${primaryEndY}`);
       return true;
     });
     
     logger.info(`📱 Mobile Debug: Primary area (50%-87.5%) filtered to ${primaryFiltered.length} lines`);
+    if (primaryFiltered.length > 0) {
+      logger.info(`📱 Mobile Debug: Included lines:`, primaryFiltered.map(line => 
+        `"${line.text}" (Y: ${line.avgY})`
+      ));
+    }
     
     // If primary strategy found good candidates, use them
     if (primaryFiltered.length >= 2) {
@@ -784,18 +791,30 @@ class VisionService {
       }
     }
     
-    // Sort pairs by distance (closest pairs first), then by lower similarity (more distinct text)
+    // Sort pairs by Y position (higher pairs first), then by distance, then by similarity
     pairs.sort((a, b) => {
-      if (Math.abs(a.distance - b.distance) < 10) {
-        // If distances are similar, prefer pairs with lower text similarity (more distinct)
-        return a.similarity - b.similarity;
+      // First priority: Higher pairs (lower Y values) are preferred
+      const aAvgY = (a.top.avgY + a.bottom.avgY) / 2;
+      const bAvgY = (b.top.avgY + b.bottom.avgY) / 2;
+      
+      if (Math.abs(aAvgY - bAvgY) > 50) {
+        // If Y positions are significantly different, prioritize higher pairs
+        return aAvgY - bAvgY;
       }
-      return a.distance - b.distance;
+      
+      // Second priority: Closer pairs (smaller distance)
+      if (Math.abs(a.distance - b.distance) > 10) {
+        return a.distance - b.distance;
+      }
+      
+      // Third priority: Lower similarity (more distinct text)
+      return a.similarity - b.similarity;
     });
     
-    logger.info(`Found ${pairs.length} spatial pairs:`, pairs.map(p => 
-      `"${p.top.text}" + "${p.bottom.text}" (${p.distance}px apart, similarity: ${(p.similarity * 100).toFixed(1)}%)`
-    ));
+    logger.info(`Found ${pairs.length} spatial pairs:`, pairs.map(p => {
+      const avgY = (p.top.avgY + p.bottom.avgY) / 2;
+      return `"${p.top.text}" + "${p.bottom.text}" (avgY: ${avgY.toFixed(0)}, ${p.distance}px apart, similarity: ${(p.similarity * 100).toFixed(1)}%)`;
+    }));
     
     return pairs;
   }
