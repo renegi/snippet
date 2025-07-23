@@ -4,6 +4,7 @@ const xml2js = require('xml2js');
 class ApplePodcastsService {
   constructor() {
     this.baseUrl = 'https://itunes.apple.com';
+    this.episodeCache = new Map(); // Cache for episode lists per podcast ID
   }
 
   async validatePodcastInfo(podcastTitle, episodeTitle) {
@@ -33,6 +34,9 @@ class ApplePodcastsService {
           podcastResult = await this.fuzzySearchPodcast(podcastTitle, episodeTitle);
         }
       }
+      
+      // Clear episode cache after all searches are complete
+      this.clearEpisodeCache();
 
       // Search for episode if we have episode title
       let episodeResult = null;
@@ -214,15 +218,18 @@ class ApplePodcastsService {
     try {
       logger.info(`Starting fuzzy podcast search for "${podcastTitle}" with episode "${episodeTitle}"`);
       
+      // Cache for podcast search results to avoid duplicate API calls
+      const searchCache = new Map();
+      
       // Phase 1: Fuzzy podcast search of cleaned up text
-      const phase1Result = await this.fuzzySearchPodcastPhase1(podcastTitle, episodeTitle);
+      const phase1Result = await this.fuzzySearchPodcastPhase1(podcastTitle, episodeTitle, searchCache);
       if (phase1Result?.validatedPodcast) {
         logger.info(`Phase 1 fuzzy search successful: "${podcastTitle}" → "${phase1Result.validatedPodcast.title}"`);
         return phase1Result;
       }
       
-      // Phase 2: Fuzzy podcast search with middle words
-      const phase2Result = await this.fuzzySearchPodcastPhase2(podcastTitle, episodeTitle);
+      // Phase 2: Fuzzy podcast search with middle words (only if Phase 1 failed)
+      const phase2Result = await this.fuzzySearchPodcastPhase2(podcastTitle, episodeTitle, searchCache);
       if (phase2Result?.validatedPodcast) {
         logger.info(`Phase 2 fuzzy search successful: "${podcastTitle}" → "${phase2Result.validatedPodcast.title}"`);
         return phase2Result;
@@ -237,7 +244,7 @@ class ApplePodcastsService {
     }
   }
 
-  async fuzzySearchPodcastPhase1(podcastTitle, episodeTitle) {
+  async fuzzySearchPodcastPhase1(podcastTitle, episodeTitle, searchCache = new Map()) {
     try {
       logger.info(`Phase 1: Fuzzy search with cleaned text for "${podcastTitle}"`);
       
@@ -250,10 +257,18 @@ class ApplePodcastsService {
         return { validatedPodcast: null };
       }
       
-      // Step 2: Do a fuzzy search
-      const searchResult = await this.searchMultiplePodcasts(cleanedText);
-      const candidates = searchResult.podcasts || [];
+      // Step 2: Do a fuzzy search (use cache if available)
+      let searchResult;
+      if (searchCache.has(cleanedText)) {
+        searchResult = searchCache.get(cleanedText);
+        logger.info(`Using cached search results for "${cleanedText}"`);
+      } else {
+        searchResult = await this.searchMultiplePodcasts(cleanedText);
+        searchCache.set(cleanedText, searchResult);
+        logger.info(`Cached search results for "${cleanedText}"`);
+      }
       
+      const candidates = searchResult.podcasts || [];
       logger.info(`Found ${candidates.length} podcast candidates for "${cleanedText}"`);
       
       // Step 3: Check if any candidates have .85 or greater similarity score
@@ -270,10 +285,11 @@ class ApplePodcastsService {
       for (const candidate of highConfidenceCandidates) {
         logger.info(`Testing candidate: "${candidate.title}" (confidence: ${candidate.confidence.toFixed(3)})`);
         
-        // Try exact episode search first
-        const episodeResult = await this.searchEpisode(episodeTitle, candidate.id);
+        // Try episode search (combines exact and fuzzy search)
+        logger.info(`Searching for episode "${episodeTitle}" in candidate "${candidate.title}"`);
+        const episodeResult = await this.fuzzySearchEpisodeInPodcast(candidate, episodeTitle);
         if (episodeResult?.validatedEpisode) {
-          logger.info(`Exact episode found in candidate "${candidate.title}": "${episodeResult.validatedEpisode.title}"`);
+          logger.info(`Episode found in candidate "${candidate.title}": "${episodeResult.validatedEpisode.title}" (confidence: ${episodeResult.validatedEpisode.confidence.toFixed(3)})`);
           return {
             validatedPodcast: {
               id: candidate.id,
@@ -284,24 +300,6 @@ class ApplePodcastsService {
               confidence: candidate.confidence
             },
             validatedEpisode: episodeResult.validatedEpisode
-          };
-        }
-        
-        // Try fuzzy episode search if exact search fails
-        logger.info(`Trying fuzzy episode search in candidate "${candidate.title}" for episode "${episodeTitle}"`);
-        const fuzzyEpisodeResult = await this.fuzzySearchEpisodeInPodcast(candidate, episodeTitle);
-        if (fuzzyEpisodeResult?.validatedEpisode) {
-          logger.info(`Fuzzy episode found in candidate "${candidate.title}": "${fuzzyEpisodeResult.validatedEpisode.title}"`);
-          return {
-            validatedPodcast: {
-              id: candidate.id,
-              title: candidate.title,
-              artist: candidate.artist,
-              feedUrl: candidate.feedUrl,
-              artworkUrl: candidate.artworkUrl,
-              confidence: candidate.confidence
-            },
-            validatedEpisode: fuzzyEpisodeResult.validatedEpisode
           };
         }
         
@@ -317,7 +315,7 @@ class ApplePodcastsService {
     }
   }
 
-  async fuzzySearchPodcastPhase2(podcastTitle, episodeTitle) {
+  async fuzzySearchPodcastPhase2(podcastTitle, episodeTitle, searchCache = new Map()) {
     try {
       logger.info(`Phase 2: Fuzzy search with middle words for "${podcastTitle}"`);
       
@@ -339,10 +337,18 @@ class ApplePodcastsService {
         return { validatedPodcast: null };
       }
       
-      // Step 2: Do a fuzzy search of the remaining words
-      const searchResult = await this.searchMultiplePodcasts(middleWords);
-      const candidates = searchResult.podcasts || [];
+      // Step 2: Do a fuzzy search of the remaining words (use cache if available)
+      let searchResult;
+      if (searchCache.has(middleWords)) {
+        searchResult = searchCache.get(middleWords);
+        logger.info(`Using cached search results for middle words "${middleWords}"`);
+      } else {
+        searchResult = await this.searchMultiplePodcasts(middleWords);
+        searchCache.set(middleWords, searchResult);
+        logger.info(`Cached search results for middle words "${middleWords}"`);
+      }
       
+      const candidates = searchResult.podcasts || [];
       logger.info(`Found ${candidates.length} podcast candidates for middle words "${middleWords}"`);
       
       // Step 3: Check if any candidates have .85 or greater similarity score
@@ -359,10 +365,11 @@ class ApplePodcastsService {
       for (const candidate of highConfidenceCandidates) {
         logger.info(`Testing candidate: "${candidate.title}" (confidence: ${candidate.confidence.toFixed(3)})`);
         
-        // Try exact episode search first
-        const episodeResult = await this.searchEpisode(episodeTitle, candidate.id);
+        // Try episode search (combines exact and fuzzy search)
+        logger.info(`Searching for episode "${episodeTitle}" in candidate "${candidate.title}"`);
+        const episodeResult = await this.fuzzySearchEpisodeInPodcast(candidate, episodeTitle);
         if (episodeResult?.validatedEpisode) {
-          logger.info(`Exact episode found in candidate "${candidate.title}": "${episodeResult.validatedEpisode.title}"`);
+          logger.info(`Episode found in candidate "${candidate.title}": "${episodeResult.validatedEpisode.title}" (confidence: ${episodeResult.validatedEpisode.confidence.toFixed(3)})`);
           return {
             validatedPodcast: {
               id: candidate.id,
@@ -373,24 +380,6 @@ class ApplePodcastsService {
               confidence: candidate.confidence
             },
             validatedEpisode: episodeResult.validatedEpisode
-          };
-        }
-        
-        // Try fuzzy episode search if exact search fails
-        logger.info(`Trying fuzzy episode search in candidate "${candidate.title}" for episode "${episodeTitle}"`);
-        const fuzzyEpisodeResult = await this.fuzzySearchEpisodeInPodcast(candidate, episodeTitle);
-        if (fuzzyEpisodeResult?.validatedEpisode) {
-          logger.info(`Fuzzy episode found in candidate "${candidate.title}": "${fuzzyEpisodeResult.validatedEpisode.title}"`);
-          return {
-            validatedPodcast: {
-              id: candidate.id,
-              title: candidate.title,
-              artist: candidate.artist,
-              feedUrl: candidate.feedUrl,
-              artworkUrl: candidate.artworkUrl,
-              confidence: candidate.confidence
-            },
-            validatedEpisode: fuzzyEpisodeResult.validatedEpisode
           };
         }
         
@@ -435,9 +424,19 @@ class ApplePodcastsService {
     try {
       logger.info(`Fuzzy searching for episode "${episodeTitle}" in podcast "${podcast.title}"`);
       
-      // Get all episodes for this podcast
-      const episodesResult = await this.searchEpisodes(podcast.id, null);
-      const allEpisodes = episodesResult.episodes || [];
+      // Get all episodes for this podcast (cache per podcast ID to avoid refetching)
+      let allEpisodes;
+      const cacheKey = `podcast_${podcast.id}`;
+      
+      if (this.episodeCache.has(cacheKey)) {
+        allEpisodes = this.episodeCache.get(cacheKey);
+        logger.info(`Using cached episodes for podcast ${podcast.id} (${allEpisodes.length} episodes)`);
+      } else {
+        const episodesResult = await this.searchEpisodes(podcast.id, null);
+        allEpisodes = episodesResult.episodes || [];
+        this.episodeCache.set(cacheKey, allEpisodes);
+        logger.info(`Cached episodes for podcast ${podcast.id} (${allEpisodes.length} episodes)`);
+      }
       
       if (!allEpisodes || allEpisodes.length === 0) {
         logger.info(`No episodes found for podcast "${podcast.title}"`);
@@ -445,6 +444,26 @@ class ApplePodcastsService {
       }
       
       logger.info(`Found ${allEpisodes.length} episodes for fuzzy search`);
+      
+      // First, try exact match with the cached episodes
+      const exactMatch = this.findExactEpisodeMatch(episodeTitle, allEpisodes);
+      if (exactMatch) {
+        logger.info(`Exact episode match found: "${exactMatch.title}"`);
+        return {
+          validatedEpisode: {
+            id: exactMatch.id,
+            title: exactMatch.title,
+            description: exactMatch.description || '',
+            duration: exactMatch.duration || 0,
+            artworkUrl: exactMatch.artworkUrl || '',
+            confidence: 0.9, // High confidence for exact match
+            matchScore: 1.0,
+            matchedKeywords: [episodeTitle.toLowerCase()],
+            exactMatches: 1,
+            partialMatches: 0
+          }
+        };
+      }
       
       // Extract keywords from the episode candidate text
       const keywords = this.extractKeywords(episodeTitle);
@@ -458,6 +477,11 @@ class ApplePodcastsService {
       
       // Find episodes that match multiple keywords with improved fuzzy matching
       const matchingEpisodes = allEpisodes.map(episode => {
+        // Skip episodes without a title
+        if (!episode || !episode.title) {
+          return null;
+        }
+        
         const episodeTitle = episode.title.toLowerCase();
         
         // Check for exact keyword matches
@@ -480,7 +504,7 @@ class ApplePodcastsService {
           exactMatches: exactMatches.length,
           partialMatches: partialMatches.length
         };
-      }).filter(result => result.matchScore >= 0.3) // Minimum 30% keyword match required
+      }).filter(result => result !== null && result.matchScore >= 0.3) // Minimum 30% keyword match required
         .sort((a, b) => b.matchScore - a.matchScore); // Best matches first
       
       if (matchingEpisodes.length > 0) {
@@ -491,9 +515,9 @@ class ApplePodcastsService {
           validatedEpisode: {
             id: bestMatch.episode.id,
             title: bestMatch.episode.title,
-            description: bestMatch.episode.description,
-            duration: bestMatch.episode.duration,
-            artworkUrl: bestMatch.episode.artworkUrl,
+            description: bestMatch.episode.description || '',
+            duration: bestMatch.episode.duration || 0,
+            artworkUrl: bestMatch.episode.artworkUrl || '',
             confidence: 0.5 + (bestMatch.matchScore * 0.3), // 0.5-0.8 confidence range
             matchScore: bestMatch.matchScore,
             matchedKeywords: bestMatch.matchedKeywords,
@@ -510,6 +534,39 @@ class ApplePodcastsService {
       logger.error('Error in fuzzy episode search within podcast:', error);
       return { validatedEpisode: null, error: error.message };
     }
+  }
+
+  findExactEpisodeMatch(episodeTitle, episodes) {
+    if (!episodeTitle || !episodes || episodes.length === 0) {
+      return null;
+    }
+    
+    const normalizedSearchTitle = episodeTitle.toLowerCase().trim();
+    
+    // First try exact match
+    const exactMatch = episodes.find(episode => 
+      episode.title && episode.title.toLowerCase().trim() === normalizedSearchTitle
+    );
+    
+    if (exactMatch) {
+      return exactMatch;
+    }
+    
+    // Then try contains match
+    const containsMatch = episodes.find(episode => 
+      episode.title && episode.title.toLowerCase().includes(normalizedSearchTitle)
+    );
+    
+    if (containsMatch) {
+      return containsMatch;
+    }
+    
+    // Finally try reverse contains (search title contains episode title)
+    const reverseMatch = episodes.find(episode => 
+      episode.title && normalizedSearchTitle.includes(episode.title.toLowerCase())
+    );
+    
+    return reverseMatch || null;
   }
 
   extractKeywords(text) {
@@ -888,7 +945,12 @@ class ApplePodcastsService {
     } catch (error) {
       logger.error('Error parsing RSS feed:', error);
       return null;
-    }
+        }
+  }
+
+  clearEpisodeCache() {
+    this.episodeCache.clear();
+    logger.info('Episode cache cleared after all searches complete.');
   }
 }
 
