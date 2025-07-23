@@ -476,6 +476,33 @@ class ApplePodcastsService {
       logger.info(`Fuzzy searching with keywords: [${keywords.join(', ')}] among ${allEpisodes.length} episodes`);
       logger.info(`Keywords breakdown: ${keywords.length} keywords from "${episodeTitle}"`);
       
+      // Log all episodes with their scores for debugging
+      const allEpisodeScores = allEpisodes.map(episode => {
+        if (!episode || !episode.title) return null;
+        
+        const episodeTitle = episode.title.toLowerCase();
+        const exactMatches = keywords.filter(keyword => episodeTitle.includes(keyword));
+        const partialMatches = keywords.filter(keyword => {
+          const words = episodeTitle.split(/\s+/);
+          return words.some(word => word.startsWith(keyword) || keyword.startsWith(word));
+        });
+        
+        const totalMatches = exactMatches.length + (partialMatches.length * 0.5);
+        const matchScore = totalMatches / keywords.length;
+        
+        return {
+          title: episode.title,
+          score: matchScore,
+          exactMatches: exactMatches,
+          partialMatches: partialMatches.filter(k => !exactMatches.includes(k))
+        };
+      }).filter(result => result !== null)
+        .sort((a, b) => b.score - a.score);
+      
+      logger.info(`All episode scores (top 20):`, allEpisodeScores.slice(0, 20).map(e => 
+        `"${e.title}" (${e.score.toFixed(3)}, exact: [${e.exactMatches.join(', ')}], partial: [${e.partialMatches.join(', ')}])`
+      ));
+      
       // Find episodes that match multiple keywords with improved fuzzy matching
       const matchingEpisodes = allEpisodes.map(episode => {
         // Skip episodes without a title
@@ -510,7 +537,7 @@ class ApplePodcastsService {
           exactMatches: exactMatches.length,
           partialMatches: partialMatches.length
         };
-      }).filter(result => result !== null && result.matchScore >= 0.5) // Single threshold of 0.5 (50% keyword match required)
+      }).filter(result => result !== null && result.matchScore >= 0.00001) // Temporary very low threshold for debugging
         .sort((a, b) => {
           // Primary sort: by match score (highest first)
           if (b.matchScore !== a.matchScore) {
@@ -552,7 +579,7 @@ class ApplePodcastsService {
         };
       }
       
-      logger.info(`No episodes found with match score >= 0.5`);
+      logger.info(`No episodes found with match score >= 0.00001`);
       return { validatedEpisode: null };
       
     } catch (error) {
