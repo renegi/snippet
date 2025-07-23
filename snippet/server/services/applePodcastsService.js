@@ -476,16 +476,8 @@ class ApplePodcastsService {
       logger.info(`Fuzzy searching with keywords: [${keywords.join(', ')}] among ${allEpisodes.length} episodes`);
       logger.info(`Keywords breakdown: ${keywords.length} keywords from "${episodeTitle}"`);
       
-      // Log all episodes with their scores for debugging
-      logger.info(`Raw episode count: ${allEpisodes.length}`);
-      logger.info(`First 5 episodes:`, allEpisodes.slice(0, 5).map(e => ({
-        hasEpisode: !!e,
-        hasTitle: !!(e && e.title),
-        hasTrackName: !!(e && e.trackName),
-        title: e?.title || 'NO_TITLE',
-        trackName: e?.trackName || 'NO_TRACK_NAME',
-        type: typeof e?.title
-      })));
+      // Log episode count for debugging
+      logger.info(`Processing ${allEpisodes.length} episodes for fuzzy search`);
       
       const allEpisodeScores = allEpisodes.map(episode => {
         // Handle both 'title' and 'trackName' properties from Apple Podcasts API
@@ -520,8 +512,8 @@ class ApplePodcastsService {
       }).filter(result => result !== null)
         .sort((a, b) => b.score - a.score);
       
-      logger.info(`All episode scores (top 20):`, allEpisodeScores.slice(0, 20).map(e => 
-        `"${e.title}" (${e.score.toFixed(3)}, exact: [${e.exactMatches.join(', ')}], partial: [${e.partialMatches.join(', ')}])`
+      logger.info(`Top episode matches:`, allEpisodeScores.slice(0, 5).map(e => 
+        `"${e.title}" (${e.score.toFixed(3)})`
       ));
       
       // Find episodes that match multiple keywords with improved fuzzy matching
@@ -548,9 +540,9 @@ class ApplePodcastsService {
         const totalMatches = exactMatches.length + (partialMatches.length * 0.5);
         const matchScore = totalMatches / keywords.length;
         
-        // Log detailed matching info for debugging
-        if (matchScore >= 0.1) { // Log any episode with at least 10% match
-          logger.info(`Episode "${episode.title}" - Score: ${matchScore.toFixed(2)}, Exact: [${exactMatches.join(', ')}], Partial: [${partialMatches.filter(k => !exactMatches.includes(k)).join(', ')}]`);
+        // Only log episodes with significant matches (50% or higher) to reduce noise
+        if (matchScore >= 0.5) {
+          logger.info(`High match episode: "${episodeTitle}" - Score: ${matchScore.toFixed(2)}, Exact: [${exactMatches.join(', ')}], Partial: [${partialMatches.filter(k => !exactMatches.includes(k)).join(', ')}]`);
         }
         
         return {

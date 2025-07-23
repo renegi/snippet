@@ -162,11 +162,11 @@ class VisionService {
     logger.info(`📱 Mobile Debug: Image dimensions: ${imageWidth}x${imageHeight}`);
     logger.info(`📱 Mobile Debug: minY: ${minY}, maxY: ${maxY}, imageHeight: ${imageHeight}`);
     
-    // PRIMARY STRATEGY: Focus on the podcast content area (50%-87.5% of screen height)
+    // PRIMARY STRATEGY: Focus on the podcast content area (50%-100% of screen height)
     const primaryStartY = minY + (imageHeight * 0.50);  // 50% from top
-    const primaryEndY = minY + (imageHeight * 0.875);   // 87.5% from top
+    const primaryEndY = minY + (imageHeight * 1.00);    // 100% from top (bottom of screen)
     
-    logger.info(`📱 Mobile Debug: Primary range: ${primaryStartY}-${primaryEndY} (50%-87.5%)`);
+    logger.info(`📱 Mobile Debug: Primary range: ${primaryStartY}-${primaryEndY} (50%-100%)`);
     
     const primaryFiltered = lines.filter(line => {
       // Must be in the primary content area
@@ -185,7 +185,7 @@ class VisionService {
       return true;
     });
     
-    logger.info(`📱 Mobile Debug: Primary area (50%-87.5%) filtered to ${primaryFiltered.length} lines`);
+    logger.info(`📱 Mobile Debug: Primary area (50%-100%) filtered to ${primaryFiltered.length} lines`);
     if (primaryFiltered.length > 0) {
       logger.info(`📱 Mobile Debug: Included lines:`, primaryFiltered.map(line => 
         `"${line.text}" (Y: ${line.avgY})`
@@ -640,8 +640,9 @@ class VisionService {
     // Strategy 1: Find spatially close pairs and validate them
     const spatialPairs = this.findSpatialPairs(candidates);
     
-    // Validate spatial pairs and collect results, with early exit for high confidence
-    const spatialResults = [];
+    // First pass: Collect all validated podcasts from spatial pairs
+    const validatedPodcasts = [];
+    
     for (const pair of spatialPairs) {
       logger.info(`Testing spatial pair: top="${pair.top.text}" bottom="${pair.bottom.text}" (distance: ${pair.distance}px)`);
       
@@ -649,59 +650,150 @@ class VisionService {
       const result1 = await this.validateSpatialPair(pair.bottom, pair.top, 'podcast-episode');
       if (result1.success) {
         logger.info('Spatial pair validation successful (bottom=podcast, top=episode)');
-        spatialResults.push({
-          ...result1,
-          pair,
-          method: 'spatial_bottom_podcast_top_episode'
+        return result1; // Return immediately if we get a complete success
+      } else if (result1.podcastValidated) {
+        // Podcast validated but episode didn't - save the validated podcast
+        logger.info(`Podcast validated but episode failed, saving for cross-pair testing: ${result1.validatedPodcast.title}`);
+        validatedPodcasts.push({
+          validatedPodcast: result1.validatedPodcast,
+          confidence: result1.podcastConfidence,
+          sourcePair: pair,
+          sourceCandidate: pair.bottom.text
         });
-        
-        // If this result has high confidence, we can stop testing more pairs
-        if (result1.confidence >= 0.5) {
-          logger.info(`High-confidence result found (${result1.confidence}), stopping spatial pair validation`);
-          break;
-        }
       }
       
       // Fallback: top = podcast, bottom = episode
       const result2 = await this.validateSpatialPair(pair.top, pair.bottom, 'episode-podcast');
       if (result2.success) {
         logger.info('Spatial pair validation successful (top=podcast, bottom=episode)');
-        spatialResults.push({
-          ...result2,
-          pair,
-          method: 'spatial_top_podcast_bottom_episode'
+        return result2; // Return immediately if we get a complete success
+      } else if (result2.podcastValidated) {
+        // Podcast validated but episode didn't - save the validated podcast
+        logger.info(`Podcast validated but episode failed, saving for cross-pair testing: ${result2.validatedPodcast.title}`);
+        validatedPodcasts.push({
+          validatedPodcast: result2.validatedPodcast,
+          confidence: result2.podcastConfidence,
+          sourcePair: pair,
+          sourceCandidate: pair.top.text
         });
+      }
+    }
+    
+    // Strategy 2: Cross-pair testing - try validated podcasts with episode candidates from pairs containing that podcast
+    if (validatedPodcasts.length > 0) {
+      logger.info(`Found ${validatedPodcasts.length} validated podcasts from spatial pairs, trying cross-pair episode matching...`);
+      
+      // Sort validated podcasts by confidence (highest first)
+      validatedPodcasts.sort((a, b) => b.confidence - a.confidence);
+      
+      for (const { validatedPodcast, confidence: podcastConfidence, sourcePair, sourceCandidate } of validatedPodcasts) {
+        logger.info(`Testing validated podcast "${validatedPodcast.title}" with episode candidates from pairs containing "${sourceCandidate}"...`);
         
-        // If this result has high confidence, we can stop testing more pairs
-        if (result2.confidence >= 0.5) {
-          logger.info(`High-confidence result found (${result2.confidence}), stopping spatial pair validation`);
-          break;
+        // Find all pairs that contain the original podcast candidate text
+        const relevantPairs = spatialPairs.filter(pair => 
+          pair.top.text === sourceCandidate || pair.bottom.text === sourceCandidate
+        );
+        
+        logger.info(`Found ${relevantPairs.length} pairs containing "${sourceCandidate}":`, 
+          relevantPairs.map(p => `"${p.top.text}" + "${p.bottom.text}"`));
+        
+        // Collect episode candidates from relevant pairs
+        const relevantEpisodeCandidates = [];
+        for (const pair of relevantPairs) {
+          if (pair.top.text === sourceCandidate) {
+            relevantEpisodeCandidates.push(pair.bottom.text);
+          } else {
+            relevantEpisodeCandidates.push(pair.top.text);
+          }
+        }
+        
+        logger.info(`Episode candidates from relevant pairs:`, relevantEpisodeCandidates);
+        
+        // Try each relevant episode candidate with this validated podcast
+        for (const episodeText of relevantEpisodeCandidates) {
+          // Skip the episode candidate that was already tested with this podcast
+          if (episodeText === sourceCandidate) {
+            continue;
+          }
+          
+          logger.info(`Testing episode candidate "${episodeText}" with validated podcast "${validatedPodcast.title}"`);
+          
+          // Try exact episode validation first
+          try {
+            const exactEpisodeValidation = await applePodcastsService.validatePodcastInfo(
+              validatedPodcast.title, 
+              episodeText
+            );
+            
+            if (exactEpisodeValidation.validated && 
+                exactEpisodeValidation.validatedEpisode?.confidence >= 0.5) {
+              logger.info(`Cross-pair exact episode validation successful: "${exactEpisodeValidation.validatedEpisode.title}"`);
+              return {
+                success: true,
+                podcastTitle: validatedPodcast.title,
+                episodeTitle: exactEpisodeValidation.validatedEpisode.title,
+                confidence: Math.min(podcastConfidence, exactEpisodeValidation.confidence),
+                validation: {
+                  validated: true,
+                  method: 'cross_pair_exact',
+                  validatedPodcast: {
+                    id: validatedPodcast.id,
+                    title: validatedPodcast.title,
+                    artworkUrl: validatedPodcast.artworkUrl,
+                    confidence: validatedPodcast.confidence
+                  },
+                  validatedEpisode: {
+                    id: exactEpisodeValidation.validatedEpisode.id,
+                    title: exactEpisodeValidation.validatedEpisode.title,
+                    artworkUrl: exactEpisodeValidation.validatedEpisode.artworkUrl,
+                    confidence: exactEpisodeValidation.validatedEpisode.confidence
+                  }
+                },
+                player: 'validated'
+              };
+            }
+          } catch (error) {
+            logger.debug('Cross-pair exact episode validation failed, trying fuzzy search:', error.message);
+          }
+          
+          // Try fuzzy search for episode
+          const fuzzyResult = await this.fuzzySearchEpisode(validatedPodcast, episodeText);
+          
+          if (fuzzyResult.success) {
+            logger.info(`Cross-pair fuzzy episode search successful: "${fuzzyResult.episodeTitle}"`);
+            return {
+              success: true,
+              podcastTitle: validatedPodcast.title,
+              episodeTitle: fuzzyResult.episodeTitle,
+              confidence: Math.min(podcastConfidence, fuzzyResult.confidence),
+              validation: {
+                validated: true,
+                method: 'cross_pair_fuzzy',
+                validatedPodcast: {
+                  id: validatedPodcast.id,
+                  title: validatedPodcast.title,
+                  artworkUrl: validatedPodcast.artworkUrl,
+                  confidence: validatedPodcast.confidence
+                },
+                validatedEpisode: {
+                  id: fuzzyResult.episodeId,
+                  title: fuzzyResult.episodeTitle,
+                  artworkUrl: fuzzyResult.artworkUrl,
+                  confidence: fuzzyResult.confidence
+                }
+              },
+              player: 'validated'
+            };
+          }
         }
       }
     }
     
-    // If we found spatial pair results, check if we need to test all pairs
-    if (spatialResults.length > 0) {
-      // Sort by confidence (highest first)
-      spatialResults.sort((a, b) => b.confidence - a.confidence);
-      const bestResult = spatialResults[0];
-      
-      // If the best result has high confidence (>= 0.5), return it immediately
-      if (bestResult.confidence >= 0.5) {
-        logger.info(`Returning high-confidence spatial pair result: ${bestResult.podcastTitle} - ${bestResult.episodeTitle} (confidence: ${bestResult.confidence})`);
-        return bestResult;
-      }
-      
-      // If confidence is low (< 0.5), we already tested all pairs, so return the best one
-      logger.info(`Returning best spatial pair result (low confidence): ${bestResult.podcastTitle} - ${bestResult.episodeTitle} (confidence: ${bestResult.confidence})`);
-      return bestResult;
-    }
+    // Strategy 3: If no cross-pair matches, try individual candidates as podcasts
+    logger.info('No cross-pair matches found, trying individual candidates...');
     
-    // Strategy 2: If no spatial pairs work, try individual candidates as podcasts
-    logger.info('No spatial pairs validated, trying individual candidates...');
-    
-    // First, collect all validated podcasts
-    const validatedPodcasts = [];
+    // Collect all validated podcasts from individual candidates
+    const individualValidatedPodcasts = [];
     for (const candidate of candidates) {
       try {
         const validation = await applePodcastsService.validatePodcastInfo(candidate.text, null);
@@ -709,7 +801,7 @@ class VisionService {
         if (validation.validated && 
             validation.validatedPodcast?.confidence >= this.config.validationConfidenceThreshold) {
           logger.info(`Individual podcast validation successful: ${candidate.text}`);
-          validatedPodcasts.push({
+          individualValidatedPodcasts.push({
             candidate,
             validation,
             confidence: validation.confidence
@@ -721,10 +813,10 @@ class VisionService {
     }
     
     // Sort validated podcasts by confidence (highest first)
-    validatedPodcasts.sort((a, b) => b.confidence - a.confidence);
+    individualValidatedPodcasts.sort((a, b) => b.confidence - a.confidence);
     
     // Try each validated podcast with episode search
-    for (const { candidate, validation } of validatedPodcasts) {
+    for (const { candidate, validation } of individualValidatedPodcasts) {
       logger.info(`Trying episode search for validated podcast: ${validation.validatedPodcast.title}`);
       
       // Find the closest candidate directly above or below (Y-axis only)
@@ -816,8 +908,8 @@ class VisionService {
     }
     
     // If we have validated podcasts but no episodes found, return the best one with "Unknown Episode"
-    if (validatedPodcasts.length > 0) {
-      const bestPodcast = validatedPodcasts[0];
+    if (individualValidatedPodcasts.length > 0) {
+      const bestPodcast = individualValidatedPodcasts[0];
       logger.info(`Returning best validated podcast with unknown episode: ${bestPodcast.validation.validatedPodcast.title}`);
       
       return {
@@ -1043,7 +1135,10 @@ class VisionService {
       if (!podcastValidation.validated || 
           podcastValidation.validatedPodcast?.confidence < this.config.validationConfidenceThreshold) {
         logger.info(`Podcast validation failed for "${podcastCandidate.text}" (confidence: ${podcastValidation.validatedPodcast?.confidence || 0})`);
-        return { success: false };
+        return { 
+          success: false,
+          podcastValidated: false
+        };
       }
       
       logger.info(`Podcast validated: "${podcastValidation.validatedPodcast.title}" (confidence: ${podcastValidation.validatedPodcast.confidence})`);
@@ -1157,11 +1252,19 @@ class VisionService {
       }
       
       logger.info(`No episode match found for "${episodeCandidate.text}" in podcast "${podcastValidation.validatedPodcast.title}"`);
-      return { success: false };
+      return { 
+        success: false,
+        podcastValidated: true,
+        validatedPodcast: podcastValidation.validatedPodcast,
+        podcastConfidence: podcastValidation.confidence
+      };
       
     } catch (error) {
       logger.error(`Error validating spatial pair:`, error);
-      return { success: false };
+      return { 
+        success: false,
+        podcastValidated: false
+      };
     }
   }
 
@@ -1342,7 +1445,7 @@ class VisionService {
     logger.info(`📱 Mobile Debug: extractTimestamp - Full text length: ${fullText.length}`);
     logger.info(`📱 Mobile Debug: extractTimestamp - Individual texts count: ${individualTexts.length}`);
     
-    // Group words into lines and apply the same 50%-87.5% position filtering
+    // Group words into lines and apply the same 50%-100% position filtering
     const lines = this.groupWordsIntoLines(individualTexts);
     const filteredLines = this.filterByPosition(lines);
     
