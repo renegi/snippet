@@ -45,7 +45,7 @@ class VisionService {
     
     // Configuration thresholds
     this.config = {
-      minCandidateLength: 8,
+      minCandidateLength: 6,
       maxCandidateLength: 80,
       minWordCount: 2,
       lineTolerance: 10,
@@ -160,21 +160,24 @@ class VisionService {
     ));
     
     logger.info(`📱 Mobile Debug: Image dimensions: ${imageWidth}x${imageHeight}`);
+    logger.info(`📱 Mobile Debug: minY: ${minY}, maxY: ${maxY}, imageHeight: ${imageHeight}`);
     
     // PRIMARY STRATEGY: Focus on the podcast content area (50%-87.5% of screen height)
     const primaryStartY = minY + (imageHeight * 0.50);  // 50% from top
     const primaryEndY = minY + (imageHeight * 0.875);   // 87.5% from top
     
+    logger.info(`📱 Mobile Debug: Primary range: ${primaryStartY}-${primaryEndY} (50%-87.5%)`);
+    
     const primaryFiltered = lines.filter(line => {
       // Must be in the primary content area
       if (line.avgY < primaryStartY || line.avgY > primaryEndY) {
-        logger.debug(`📱 Excluding line "${line.text}" - Y: ${line.avgY}, range: ${primaryStartY}-${primaryEndY}`);
+        logger.info(`📱 Mobile Debug: Excluding "${line.text}" - Y: ${line.avgY}, range: ${primaryStartY}-${primaryEndY}`);
         return false;
       }
       
       // Exclude very large text (likely system UI or clock displays)
-      if (line.avgArea > 10000) {
-        logger.debug(`📱 Excluding very large text: "${line.text}" (area: ${line.avgArea})`);
+      if (line.avgArea > 50000) {
+        logger.info(`📱 Mobile Debug: Excluding very large text: "${line.text}" (area: ${line.avgArea})`);
         return false;
       }
       
@@ -324,18 +327,18 @@ class VisionService {
     const text = line.text.toLowerCase().trim();
     const originalText = line.text.trim();
     
-    logger.debug(`📱 isValidCandidate checking: "${originalText}" (area: ${line.avgArea}, wordCount: ${line.wordCount}, length: ${text.length}, config range: ${this.config.minCandidateLength}-${this.config.maxCandidateLength})`);
+    logger.info(`📱 Mobile Debug: isValidCandidate checking: "${originalText}" (area: ${line.avgArea}, wordCount: ${line.wordCount}, length: ${text.length}, config range: ${this.config.minCandidateLength}-${this.config.maxCandidateLength})`);
     
     // Basic length and word count filters - be more lenient for single words
     if (text.length < this.config.minCandidateLength || 
         text.length > this.config.maxCandidateLength) {
-        logger.debug(`📱 Rejecting "${originalText}" - length ${text.length} outside range ${this.config.minCandidateLength}-${this.config.maxCandidateLength}`);
+        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - length ${text.length} outside range ${this.config.minCandidateLength}-${this.config.maxCandidateLength}`);
         return false;
       }
       
     // For word count: allow single words if they're substantial (like podcast names)
     if (line.wordCount < 1) {
-        logger.debug(`📱 Rejecting "${originalText}" - word count ${line.wordCount} < 1`);
+        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - word count ${line.wordCount} < 1`);
         return false;
       }
       
@@ -351,21 +354,21 @@ class VisionService {
     ];
     
     if (systemUITexts.some(systemText => text.includes(systemText))) {
-      logger.debug(`📱 Rejecting "${originalText}" - system UI text`);
+      logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - system UI text`);
       return false;
     }
     
     // Exclude very small text (likely thumbnail overlays or UI elements)
     if (line.avgArea < 200) {
-      logger.debug(`📱 Rejecting "${originalText}" - area ${line.avgArea} < 200`);
+      logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - area ${line.avgArea} < 200`);
       return false;
     }
     
-    logger.debug(`📱 "${originalText}" passed area check (area: ${line.avgArea})`);
+    logger.info(`📱 Mobile Debug: "${originalText}" passed area check (area: ${line.avgArea})`);
       
     // If it's a single word, it should be substantial (not just a short word)
     if (line.wordCount === 1 && text.length < 6) {
-        logger.debug(`📱 Rejecting "${originalText}" - single word too short (length: ${text.length})`);
+        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - single word too short (length: ${text.length})`);
         return false;
       }
       
@@ -402,19 +405,12 @@ class VisionService {
         originalText.length > 3 && 
         originalText.length < 15 && 
         line.wordCount <= 2) {
-      logger.debug(`📱 Rejecting "${originalText}" - all caps and short (length: ${originalText.length}, words: ${line.wordCount})`);
+      logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - all caps and short (length: ${originalText.length}, words: ${line.wordCount})`);
       return false;
     }
     
-    // 7. Starts with lowercase (likely mid-sentence/truncated) - BUT be more lenient
-    // Allow if it's substantial content (like truncated episode titles)
-    if (/^[a-z]/.test(originalText)) {
-      // Allow if it's substantial content (longer than 10 chars or contains meaningful words)
-      if (text.length < 10 && !text.includes('market') && !text.includes('podcast') && !text.includes('episode')) {
-        logger.debug(`📱 Rejecting "${originalText}" - starts with lowercase and too short (length: ${text.length})`);
-        return false;
-      }
-    }
+    // 7. Starts with lowercase - ALLOW ALL (removed filter)
+    // This allows truncated episode titles and other content that starts with lowercase
     
     // 8. Contains ellipsis (truncated) - BUT don't filter out completely
     if (/\.{3,}|…/.test(text)) {
@@ -429,6 +425,7 @@ class VisionService {
       return false;
     }
     
+    logger.info(`📱 Mobile Debug: "${originalText}" PASSED all filters!`);
     return true;
   }
 
