@@ -700,15 +700,41 @@ class VisionService {
     // Strategy 2: If no spatial pairs work, try individual candidates as podcasts
     logger.info('No spatial pairs validated, trying individual candidates...');
     
-    // First, collect all validated podcasts
+    // First, collect all validated podcasts (including fuzzy matches)
     const validatedPodcasts = [];
     for (const candidate of candidates) {
       try {
-        const validation = await applePodcastsService.validatePodcastInfo(candidate.text, null);
+        // Try direct validation first
+        let validation = await applePodcastsService.validatePodcastInfo(candidate.text, null);
+        
+        // If direct validation fails, try fuzzy search
+        if (!validation.validated || 
+            validation.validatedPodcast?.confidence < this.config.validationConfidenceThreshold) {
+          logger.info(`Direct validation failed for "${candidate.text}", trying fuzzy search...`);
+          
+          const fuzzyResult = await this.fuzzySearchPodcast(candidate.text);
+          
+          if (fuzzyResult.success && fuzzyResult.confidence >= this.config.validationConfidenceThreshold) {
+            logger.info(`Fuzzy podcast search successful: "${fuzzyResult.podcastTitle}" (confidence: ${fuzzyResult.confidence})`);
+            
+            // Create validation object that matches expected format
+            validation = {
+              validated: true,
+              confidence: fuzzyResult.confidence,
+              validatedPodcast: {
+                id: fuzzyResult.podcastId,
+                title: fuzzyResult.podcastTitle,
+                artist: fuzzyResult.artistName,
+                artworkUrl: fuzzyResult.artworkUrl,
+                confidence: fuzzyResult.confidence
+              }
+            };
+          }
+        }
         
         if (validation.validated && 
             validation.validatedPodcast?.confidence >= this.config.validationConfidenceThreshold) {
-          logger.info(`Individual podcast validation successful: ${candidate.text}`);
+          logger.info(`Podcast validation successful: ${candidate.text} → ${validation.validatedPodcast.title}`);
           validatedPodcasts.push({
             candidate,
             validation,
@@ -716,7 +742,7 @@ class VisionService {
           });
         }
       } catch (error) {
-        logger.debug(`Individual podcast validation error for ${candidate.text}:`, error.message);
+        logger.debug(`Podcast validation error for ${candidate.text}:`, error.message);
       }
     }
     
@@ -1037,13 +1063,35 @@ class VisionService {
     try {
       logger.info(`Validating spatial pair (${pairType}): podcast="${podcastCandidate.text}" episode="${episodeCandidate.text}"`);
       
-      // Step 1: Validate the podcast candidate
-      const podcastValidation = await applePodcastsService.validatePodcastInfo(podcastCandidate.text, null);
+      // Step 1: Try direct podcast validation first
+      let podcastValidation = await applePodcastsService.validatePodcastInfo(podcastCandidate.text, null);
       
+      // Step 1.5: If direct validation fails, try fuzzy podcast search
       if (!podcastValidation.validated || 
           podcastValidation.validatedPodcast?.confidence < this.config.validationConfidenceThreshold) {
-        logger.info(`Podcast validation failed for "${podcastCandidate.text}" (confidence: ${podcastValidation.validatedPodcast?.confidence || 0})`);
-        return { success: false };
+        logger.info(`Direct podcast validation failed for "${podcastCandidate.text}", trying fuzzy search...`);
+        
+        const fuzzyPodcastResult = await this.fuzzySearchPodcast(podcastCandidate.text);
+        
+        if (fuzzyPodcastResult.success && fuzzyPodcastResult.confidence >= this.config.validationConfidenceThreshold) {
+          logger.info(`Fuzzy podcast search successful: "${fuzzyPodcastResult.podcastTitle}" (confidence: ${fuzzyPodcastResult.confidence})`);
+          
+          // Create a validation object that matches the expected format
+          podcastValidation = {
+            validated: true,
+            confidence: fuzzyPodcastResult.confidence,
+            validatedPodcast: {
+              id: fuzzyPodcastResult.podcastId,
+              title: fuzzyPodcastResult.podcastTitle,
+              artist: fuzzyPodcastResult.artistName,
+              artworkUrl: fuzzyPodcastResult.artworkUrl,
+              confidence: fuzzyPodcastResult.confidence
+            }
+          };
+        } else {
+          logger.info(`Fuzzy podcast search also failed for "${podcastCandidate.text}" (confidence: ${fuzzyPodcastResult.confidence || 0})`);
+          return { success: false };
+        }
       }
       
       logger.info(`Podcast validated: "${podcastValidation.validatedPodcast.title}" (confidence: ${podcastValidation.validatedPodcast.confidence})`);
@@ -1203,6 +1251,88 @@ class VisionService {
       
     } catch (error) {
       logger.error('Error in fuzzy episode search:', error);
+      return { success: false };
+    }
+  }
+
+  async fuzzySearchPodcast(podcastText) {
+    try {
+      // Search for podcasts using the Apple Podcasts API
+      const searchResult = await applePodcastsService.searchPodcast(podcastText);
+      const allPodcasts = searchResult.results || [];
+      
+      if (!allPodcasts || allPodcasts.length === 0) {
+        logger.info(`No podcasts found for search term: "${podcastText}"`);
+        return { success: false };
+      }
+      
+      // Extract keywords from the podcast candidate text
+      const keywords = this.extractKeywords(podcastText);
+      
+      if (keywords.length === 0) {
+        logger.info(`No keywords extracted from "${podcastText}"`);
+        return { success: false };
+      }
+      
+      logger.info(`Fuzzy searching podcasts with keywords: [${keywords.join(', ')}] among ${allPodcasts.length} results`);
+      
+      // Find podcasts that match multiple keywords with improved fuzzy matching
+      const matchingPodcasts = allPodcasts.map(podcast => {
+        const podcastTitle = podcast.trackName.toLowerCase();
+        const podcastArtist = podcast.artistName?.toLowerCase() || '';
+        const fullText = `${podcastTitle} ${podcastArtist}`;
+        
+        // Check for exact keyword matches in title
+        const exactMatches = keywords.filter(keyword => podcastTitle.includes(keyword));
+        
+        // Check for partial word matches (for truncated text)
+        const partialMatches = keywords.filter(keyword => {
+          const words = podcastTitle.split(/\s+/);
+          return words.some(word => word.startsWith(keyword) || keyword.startsWith(word));
+        });
+        
+        // Check for matches in artist name (for cases like "Where Should We Begin? with Esther Perel")
+        const artistMatches = keywords.filter(keyword => podcastArtist.includes(keyword));
+        
+        // Combine all matches, giving different weights
+        const totalMatches = exactMatches.length + (partialMatches.length * 0.7) + (artistMatches.length * 0.5);
+        const matchScore = totalMatches / keywords.length;
+        
+        return {
+          podcast,
+          matchedKeywords: [...exactMatches, ...partialMatches.filter(k => !exactMatches.includes(k)), ...artistMatches.filter(k => !exactMatches.includes(k) && !partialMatches.includes(k))],
+          matchScore,
+          exactMatches: exactMatches.length,
+          partialMatches: partialMatches.length,
+          artistMatches: artistMatches.length
+        };
+      }).filter(result => result.matchScore >= 0.3) // Minimum 30% keyword match required
+        .sort((a, b) => b.matchScore - a.matchScore); // Best matches first
+      
+      if (matchingPodcasts.length > 0) {
+        const bestMatch = matchingPodcasts[0];
+        logger.info(`Best fuzzy podcast match: "${bestMatch.podcast.trackName}" by "${bestMatch.podcast.artistName}" (score: ${bestMatch.matchScore.toFixed(2)}, exact: ${bestMatch.exactMatches}, partial: ${bestMatch.partialMatches}, artist: ${bestMatch.artistMatches})`);
+        
+        return {
+          success: true,
+          podcastTitle: bestMatch.podcast.trackName,
+          podcastId: bestMatch.podcast.trackId,
+          artistName: bestMatch.podcast.artistName,
+          artworkUrl: bestMatch.podcast.artworkUrl100 || bestMatch.podcast.artworkUrl600,
+          confidence: 0.5 + (bestMatch.matchScore * 0.3), // 0.5-0.8 confidence range
+          matchScore: bestMatch.matchScore,
+          matchedKeywords: bestMatch.matchedKeywords,
+          exactMatches: bestMatch.exactMatches,
+          partialMatches: bestMatch.partialMatches,
+          artistMatches: bestMatch.artistMatches
+        };
+      }
+      
+      logger.info(`No podcasts found with match score >= 0.3`);
+      return { success: false };
+      
+    } catch (error) {
+      logger.error('Error in fuzzy podcast search:', error);
       return { success: false };
     }
   }
