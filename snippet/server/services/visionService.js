@@ -1504,26 +1504,90 @@ class VisionService {
         }
       }
       
-      // Step 2: Fuzzy search with cleaned up text
+      // Step 2: Fuzzy search with cleaned up text - check after each variation
       logger.info(`Step 2: Trying fuzzy search with cleaned up text for "${podcastText}"`);
-      const fuzzyResult = await this.fuzzySearchPodcast(podcastText);
       
-      if (fuzzyResult.success && fuzzyResult.highConfidenceCandidates.length > 0) {
-        logger.info(`Found ${fuzzyResult.highConfidenceCandidates.length} high-confidence candidates (>= 0.85)`);
+      // Extract keywords for search variations
+      const keywords = this.extractKeywords(podcastText);
+      const searchVariations = this.generateSearchVariations(podcastText);
+      logger.info(`Trying ${searchVariations.length} phrase variations: [${searchVariations.join(', ')}]`);
+      
+      // Try each search variation and check for high-confidence candidates immediately
+      for (const searchTerm of searchVariations) {
+        const searchResult = await applePodcastsService.searchPodcast(searchTerm);
+        const podcasts = searchResult.results || [];
         
-        // Try episode validation with each high-confidence candidate
-        for (const candidate of fuzzyResult.highConfidenceCandidates) {
-          const validatedPodcast = {
-            id: candidate.podcast.trackId,
-            title: candidate.podcast.trackName,
-            artist: candidate.podcast.artistName,
-            artworkUrl: candidate.podcast.artworkUrl100 || candidate.podcast.artworkUrl600,
-            confidence: candidate.confidence
-          };
+        if (podcasts.length > 0) {
+          logger.info(`Found ${podcasts.length} podcasts with phrase search: "${searchTerm}"`);
           
-          const episodeResult = await this.tryEpisodeValidation(validatedPodcast, episodeText, 'fuzzy_cleaned');
-          if (episodeResult.success) {
-            return episodeResult;
+          // Calculate similarity scores for this batch
+          const candidatesWithSimilarity = podcasts.map(podcast => {
+            const similarity = applePodcastsService.calculateSimilarity(podcastText, podcast.trackName);
+            return {
+              podcast,
+              similarity: similarity,
+              confidence: similarity
+            };
+          }).filter(result => result.similarity >= 0.85) // Only high-confidence candidates
+            .sort((a, b) => b.similarity - a.similarity);
+          
+          if (candidatesWithSimilarity.length > 0) {
+            logger.info(`Found ${candidatesWithSimilarity.length} high-confidence candidates (>= 0.85): ${candidatesWithSimilarity.map(c => `"${c.podcast.trackName}" (${c.similarity.toFixed(3)})`).join(', ')}`);
+            
+            // Try episode validation with each high-confidence candidate
+            for (const candidate of candidatesWithSimilarity) {
+              const validatedPodcast = {
+                id: candidate.podcast.trackId,
+                title: candidate.podcast.trackName,
+                artist: candidate.podcast.artistName,
+                artworkUrl: candidate.podcast.artworkUrl100 || candidate.podcast.artworkUrl600,
+                confidence: candidate.confidence
+              };
+              
+              const episodeResult = await this.tryEpisodeValidation(validatedPodcast, episodeText, 'fuzzy_cleaned');
+              if (episodeResult.success) {
+                return episodeResult;
+              }
+            }
+          }
+        }
+      }
+      
+      // Step 3: If no high-confidence candidates found in phrase search, try keyword search
+      logger.info(`Step 3: Trying individual keyword searches for "${podcastText}"`);
+      const keywordPodcasts = await this.searchByIndividualKeywords(keywords);
+      
+      if (keywordPodcasts.length > 0) {
+        logger.info(`Found ${keywordPodcasts.length} podcasts with keyword searches`);
+        
+        // Calculate similarity scores for keyword results
+        const candidatesWithSimilarity = keywordPodcasts.map(podcast => {
+          const similarity = applePodcastsService.calculateSimilarity(podcastText, podcast.trackName);
+          return {
+            podcast,
+            similarity: similarity,
+            confidence: similarity
+          };
+        }).filter(result => result.similarity >= 0.85) // Only high-confidence candidates
+          .sort((a, b) => b.similarity - a.similarity);
+        
+        if (candidatesWithSimilarity.length > 0) {
+          logger.info(`Found ${candidatesWithSimilarity.length} high-confidence candidates from keywords (>= 0.85): ${candidatesWithSimilarity.map(c => `"${c.podcast.trackName}" (${c.similarity.toFixed(3)})`).join(', ')}`);
+          
+          // Try episode validation with each high-confidence candidate
+          for (const candidate of candidatesWithSimilarity) {
+            const validatedPodcast = {
+              id: candidate.podcast.trackId,
+              title: candidate.podcast.trackName,
+              artist: candidate.podcast.artistName,
+              artworkUrl: candidate.podcast.artworkUrl100 || candidate.podcast.artworkUrl600,
+              confidence: candidate.confidence
+            };
+            
+            const episodeResult = await this.tryEpisodeValidation(validatedPodcast, episodeText, 'fuzzy_keywords');
+            if (episodeResult.success) {
+              return episodeResult;
+            }
           }
         }
       }
