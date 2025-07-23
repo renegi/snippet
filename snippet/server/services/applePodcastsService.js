@@ -270,9 +270,10 @@ class ApplePodcastsService {
       for (const candidate of highConfidenceCandidates) {
         logger.info(`Testing candidate: "${candidate.title}" (confidence: ${candidate.confidence.toFixed(3)})`);
         
+        // Try exact episode search first
         const episodeResult = await this.searchEpisode(episodeTitle, candidate.id);
         if (episodeResult?.validatedEpisode) {
-          logger.info(`Episode found in candidate "${candidate.title}": "${episodeResult.validatedEpisode.title}"`);
+          logger.info(`Exact episode found in candidate "${candidate.title}": "${episodeResult.validatedEpisode.title}"`);
           return {
             validatedPodcast: {
               id: candidate.id,
@@ -284,9 +285,27 @@ class ApplePodcastsService {
             },
             validatedEpisode: episodeResult.validatedEpisode
           };
-        } else {
-          logger.info(`No episode found in candidate "${candidate.title}" for episode "${episodeTitle}"`);
         }
+        
+        // Try fuzzy episode search if exact search fails
+        logger.info(`Trying fuzzy episode search in candidate "${candidate.title}" for episode "${episodeTitle}"`);
+        const fuzzyEpisodeResult = await this.fuzzySearchEpisodeInPodcast(candidate, episodeTitle);
+        if (fuzzyEpisodeResult?.validatedEpisode) {
+          logger.info(`Fuzzy episode found in candidate "${candidate.title}": "${fuzzyEpisodeResult.validatedEpisode.title}"`);
+          return {
+            validatedPodcast: {
+              id: candidate.id,
+              title: candidate.title,
+              artist: candidate.artist,
+              feedUrl: candidate.feedUrl,
+              artworkUrl: candidate.artworkUrl,
+              confidence: candidate.confidence
+            },
+            validatedEpisode: fuzzyEpisodeResult.validatedEpisode
+          };
+        }
+        
+        logger.info(`No episode found in candidate "${candidate.title}" for episode "${episodeTitle}"`);
       }
       
       logger.info(`No valid episodes found in any high-confidence candidates`);
@@ -340,9 +359,10 @@ class ApplePodcastsService {
       for (const candidate of highConfidenceCandidates) {
         logger.info(`Testing candidate: "${candidate.title}" (confidence: ${candidate.confidence.toFixed(3)})`);
         
+        // Try exact episode search first
         const episodeResult = await this.searchEpisode(episodeTitle, candidate.id);
         if (episodeResult?.validatedEpisode) {
-          logger.info(`Episode found in candidate "${candidate.title}": "${episodeResult.validatedEpisode.title}"`);
+          logger.info(`Exact episode found in candidate "${candidate.title}": "${episodeResult.validatedEpisode.title}"`);
           return {
             validatedPodcast: {
               id: candidate.id,
@@ -354,9 +374,27 @@ class ApplePodcastsService {
             },
             validatedEpisode: episodeResult.validatedEpisode
           };
-        } else {
-          logger.info(`No episode found in candidate "${candidate.title}" for episode "${episodeTitle}"`);
         }
+        
+        // Try fuzzy episode search if exact search fails
+        logger.info(`Trying fuzzy episode search in candidate "${candidate.title}" for episode "${episodeTitle}"`);
+        const fuzzyEpisodeResult = await this.fuzzySearchEpisodeInPodcast(candidate, episodeTitle);
+        if (fuzzyEpisodeResult?.validatedEpisode) {
+          logger.info(`Fuzzy episode found in candidate "${candidate.title}": "${fuzzyEpisodeResult.validatedEpisode.title}"`);
+          return {
+            validatedPodcast: {
+              id: candidate.id,
+              title: candidate.title,
+              artist: candidate.artist,
+              feedUrl: candidate.feedUrl,
+              artworkUrl: candidate.artworkUrl,
+              confidence: candidate.confidence
+            },
+            validatedEpisode: fuzzyEpisodeResult.validatedEpisode
+          };
+        }
+        
+        logger.info(`No episode found in candidate "${candidate.title}" for episode "${episodeTitle}"`);
       }
       
       logger.info(`No valid episodes found in any high-confidence candidates for middle words`);
@@ -391,6 +429,104 @@ class ApplePodcastsService {
     logger.info(`Cleaned podcast text: "${text}" → "${cleaned}"`);
     
     return cleaned;
+  }
+
+  async fuzzySearchEpisodeInPodcast(podcast, episodeTitle) {
+    try {
+      logger.info(`Fuzzy searching for episode "${episodeTitle}" in podcast "${podcast.title}"`);
+      
+      // Get all episodes for this podcast
+      const episodesResult = await this.searchEpisodes(podcast.id, null);
+      const allEpisodes = episodesResult.episodes || [];
+      
+      if (!allEpisodes || allEpisodes.length === 0) {
+        logger.info(`No episodes found for podcast "${podcast.title}"`);
+        return { validatedEpisode: null };
+      }
+      
+      logger.info(`Found ${allEpisodes.length} episodes for fuzzy search`);
+      
+      // Extract keywords from the episode candidate text
+      const keywords = this.extractKeywords(episodeTitle);
+      
+      if (keywords.length === 0) {
+        logger.info(`No keywords extracted from "${episodeTitle}"`);
+        return { validatedEpisode: null };
+      }
+      
+      logger.info(`Fuzzy searching with keywords: [${keywords.join(', ')}] among ${allEpisodes.length} episodes`);
+      
+      // Find episodes that match multiple keywords with improved fuzzy matching
+      const matchingEpisodes = allEpisodes.map(episode => {
+        const episodeTitle = episode.title.toLowerCase();
+        
+        // Check for exact keyword matches
+        const exactMatches = keywords.filter(keyword => episodeTitle.includes(keyword));
+        
+        // Check for partial word matches (for truncated text)
+        const partialMatches = keywords.filter(keyword => {
+          const words = episodeTitle.split(/\s+/);
+          return words.some(word => word.startsWith(keyword) || keyword.startsWith(word));
+        });
+        
+        // Combine exact and partial matches, giving partial matches half weight
+        const totalMatches = exactMatches.length + (partialMatches.length * 0.5);
+        const matchScore = totalMatches / keywords.length;
+        
+        return {
+          episode,
+          matchedKeywords: [...exactMatches, ...partialMatches.filter(k => !exactMatches.includes(k))],
+          matchScore,
+          exactMatches: exactMatches.length,
+          partialMatches: partialMatches.length
+        };
+      }).filter(result => result.matchScore >= 0.3) // Minimum 30% keyword match required
+        .sort((a, b) => b.matchScore - a.matchScore); // Best matches first
+      
+      if (matchingEpisodes.length > 0) {
+        const bestMatch = matchingEpisodes[0];
+        logger.info(`Best fuzzy match: "${bestMatch.episode.title}" (score: ${bestMatch.matchScore.toFixed(2)}, exact: ${bestMatch.exactMatches}, partial: ${bestMatch.partialMatches})`);
+        
+        return {
+          validatedEpisode: {
+            id: bestMatch.episode.id,
+            title: bestMatch.episode.title,
+            description: bestMatch.episode.description,
+            duration: bestMatch.episode.duration,
+            artworkUrl: bestMatch.episode.artworkUrl,
+            confidence: 0.5 + (bestMatch.matchScore * 0.3), // 0.5-0.8 confidence range
+            matchScore: bestMatch.matchScore,
+            matchedKeywords: bestMatch.matchedKeywords,
+            exactMatches: bestMatch.exactMatches,
+            partialMatches: bestMatch.partialMatches
+          }
+        };
+      }
+      
+      logger.info(`No episodes found with match score >= 0.3`);
+      return { validatedEpisode: null };
+      
+    } catch (error) {
+      logger.error('Error in fuzzy episode search within podcast:', error);
+      return { validatedEpisode: null, error: error.message };
+    }
+  }
+
+  extractKeywords(text) {
+    if (!text) return [];
+    
+    // Remove punctuation and normalize
+    let cleaned = text.toLowerCase().trim();
+    cleaned = cleaned.replace(/[^\w\s]/g, ' ');
+    
+    // Split into words and filter out common stop words
+    const stopWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those'];
+    
+    const words = cleaned.split(/\s+/).filter(word => {
+      return word.length > 2 && !stopWords.includes(word);
+    });
+    
+    return words;
   }
 
   async searchEpisode(episodeTitle, podcastId) {
