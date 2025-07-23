@@ -359,8 +359,8 @@ class VisionService {
     }
     
     // Exclude very small text (likely thumbnail overlays or UI elements)
-    if (line.avgArea < 200) {
-      logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - area ${line.avgArea} < 200`);
+    if (line.avgArea < 2500) {
+      logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - area ${line.avgArea} < 2500`);
       return false;
     }
     
@@ -640,6 +640,8 @@ class VisionService {
     // Strategy 1: Find spatially close pairs and validate them
     const spatialPairs = this.findSpatialPairs(candidates);
     
+    // Validate spatial pairs and collect results, with early exit for high confidence
+    const spatialResults = [];
     for (const pair of spatialPairs) {
       logger.info(`Testing spatial pair: top="${pair.top.text}" bottom="${pair.bottom.text}" (distance: ${pair.distance}px)`);
       
@@ -647,15 +649,52 @@ class VisionService {
       const result1 = await this.validateSpatialPair(pair.bottom, pair.top, 'podcast-episode');
       if (result1.success) {
         logger.info('Spatial pair validation successful (bottom=podcast, top=episode)');
-        return result1;
+        spatialResults.push({
+          ...result1,
+          pair,
+          method: 'spatial_bottom_podcast_top_episode'
+        });
+        
+        // If this result has high confidence, we can stop testing more pairs
+        if (result1.confidence >= 0.5) {
+          logger.info(`High-confidence result found (${result1.confidence}), stopping spatial pair validation`);
+          break;
+        }
       }
       
       // Fallback: top = podcast, bottom = episode
       const result2 = await this.validateSpatialPair(pair.top, pair.bottom, 'episode-podcast');
       if (result2.success) {
         logger.info('Spatial pair validation successful (top=podcast, bottom=episode)');
-        return result2;
+        spatialResults.push({
+          ...result2,
+          pair,
+          method: 'spatial_top_podcast_bottom_episode'
+        });
+        
+        // If this result has high confidence, we can stop testing more pairs
+        if (result2.confidence >= 0.5) {
+          logger.info(`High-confidence result found (${result2.confidence}), stopping spatial pair validation`);
+          break;
+        }
       }
+    }
+    
+    // If we found spatial pair results, check if we need to test all pairs
+    if (spatialResults.length > 0) {
+      // Sort by confidence (highest first)
+      spatialResults.sort((a, b) => b.confidence - a.confidence);
+      const bestResult = spatialResults[0];
+      
+      // If the best result has high confidence (>= 0.5), return it immediately
+      if (bestResult.confidence >= 0.5) {
+        logger.info(`Returning high-confidence spatial pair result: ${bestResult.podcastTitle} - ${bestResult.episodeTitle} (confidence: ${bestResult.confidence})`);
+        return bestResult;
+      }
+      
+      // If confidence is low (< 0.5), we already tested all pairs, so return the best one
+      logger.info(`Returning best spatial pair result (low confidence): ${bestResult.podcastTitle} - ${bestResult.episodeTitle} (confidence: ${bestResult.confidence})`);
+      return bestResult;
     }
     
     // Strategy 2: If no spatial pairs work, try individual candidates as podcasts
@@ -884,23 +923,31 @@ class VisionService {
       }
     }
     
-    // Sort pairs by Y position (higher pairs first), then by distance, then by similarity
+    // Sort pairs by candidate scores (higher scores first), then by Y position, then by distance
     pairs.sort((a, b) => {
-      // First priority: Higher pairs (lower Y values) are preferred
+      // First priority: Higher scoring candidates (better quality text)
+      const aScore = Math.max(a.top.score || 0, a.bottom.score || 0);
+      const bScore = Math.max(b.top.score || 0, b.bottom.score || 0);
+      
+      if (Math.abs(aScore - bScore) > 1) {
+        // If scores are significantly different, prioritize higher scores
+        return bScore - aScore;
+      }
+      
+      // Second priority: Higher pairs (lower Y values) are preferred
       const aAvgY = (a.top.avgY + a.bottom.avgY) / 2;
       const bAvgY = (b.top.avgY + b.bottom.avgY) / 2;
       
       if (Math.abs(aAvgY - bAvgY) > 50) {
-        // If Y positions are significantly different, prioritize higher pairs
         return aAvgY - bAvgY;
       }
       
-      // Second priority: Closer pairs (smaller distance)
+      // Third priority: Closer pairs (smaller distance)
       if (Math.abs(a.distance - b.distance) > 10) {
         return a.distance - b.distance;
       }
       
-      // Third priority: Lower similarity (more distinct text)
+      // Fourth priority: Lower similarity (more distinct text)
       return a.similarity - b.similarity;
     });
     
@@ -1131,7 +1178,7 @@ class VisionService {
           exactMatches: exactMatches.length,
           partialMatches: partialMatches.length
         };
-      }).filter(result => result.matchScore >= 0.3) // Lowered threshold to 30% for better matching
+              }).filter(result => result.matchScore >= 0.3) // Minimum 30% keyword match required
         .sort((a, b) => b.matchScore - a.matchScore); // Best matches first
       
       if (matchingEpisodes.length > 0) {
