@@ -62,10 +62,11 @@ class ApplePodcastsService {
             validated = true;
             logger.info(`Podcast validation SUCCESS: "${podcastTitle}" → "${podcastResult.validatedPodcast.title}" (episode found: "${episodeTitle}" → "${episodeResult.validatedEpisode.title}")`);
           } else {
-            // Podcast found but episode not found - this might be a platform name
-            logger.info(`Podcast validation FAILED: "${podcastTitle}" → "${podcastResult.validatedPodcast.title}" but episode "${episodeTitle}" not found in this podcast`);
-            // Don't validate the podcast if we can't find the episode
-            podcastResult.validatedPodcast = null;
+            // Podcast found but episode not found - return podcast info for cross-pair testing
+            logger.info(`Podcast validation PARTIAL: "${podcastTitle}" → "${podcastResult.validatedPodcast.title}" but episode "${episodeTitle}" not found in this podcast`);
+            // Keep the podcast info for cross-pair testing, but don't mark as fully validated
+            validated = false;
+            confidence = 0.6; // Podcast confidence only
           }
         } else {
           // No episode title provided, just validate the podcast

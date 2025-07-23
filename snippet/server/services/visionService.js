@@ -1132,7 +1132,7 @@ class VisionService {
       // Step 1: Validate the podcast candidate (pass episode title for fuzzy search)
       const podcastValidation = await applePodcastsService.validatePodcastInfo(podcastCandidate.text, episodeCandidate.text);
       
-      if (!podcastValidation.validated || 
+      if (!podcastValidation.validatedPodcast || 
           podcastValidation.validatedPodcast?.confidence < this.config.validationConfidenceThreshold) {
         logger.info(`Podcast validation failed for "${podcastCandidate.text}" (confidence: ${podcastValidation.validatedPodcast?.confidence || 0})`);
         return { 
