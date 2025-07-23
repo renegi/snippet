@@ -157,9 +157,9 @@ class VisionService {
     
     logger.info(`📱 Mobile Debug: Image dimensions: ${imageWidth}x${imageHeight}`);
     
-    // PRIMARY STRATEGY: Focus on the podcast content area (30%-90% of screen height) - more inclusive
-    const primaryStartY = minY + (imageHeight * 0.30);  // 30% from top (was 50%)
-    const primaryEndY = minY + (imageHeight * 0.90);    // 90% from top (was 87.5%)
+    // PRIMARY STRATEGY: Focus on the podcast content area (50%-87.5% of screen height)
+    const primaryStartY = minY + (imageHeight * 0.50);  // 50% from top
+    const primaryEndY = minY + (imageHeight * 0.875);   // 87.5% from top
     
     const primaryFiltered = lines.filter(line => {
       // Must be in the primary content area
@@ -182,7 +182,7 @@ class VisionService {
       return true;
     });
     
-    logger.info(`📱 Mobile Debug: Primary area (30%-90%) filtered to ${primaryFiltered.length} lines`);
+    logger.info(`📱 Mobile Debug: Primary area (50%-87.5%) filtered to ${primaryFiltered.length} lines`);
     if (primaryFiltered.length > 0) {
       logger.info(`📱 Mobile Debug: Included lines:`, primaryFiltered.map(line => 
         `"${line.text}" (Y: ${line.avgY})`
@@ -194,10 +194,39 @@ class VisionService {
       return primaryFiltered;
     }
     
-    // FALLBACK STRATEGY: Search in 10%-25% area (upper content area)
-    logger.info('📱 Mobile Debug: Primary area insufficient, trying fallback area (10%-25%)');
+    // If primary area has some candidates but not enough, try to include upper content
+    if (primaryFiltered.length === 1) {
+      logger.info('📱 Mobile Debug: Primary area has 1 candidate, trying to include upper content');
+      const upperStartY = minY + (imageHeight * 0.20);  // 20% from top
+      const upperEndY = minY + (imageHeight * 0.50);    // 50% from top
+      
+      const upperFiltered = lines.filter(line => {
+        if (line.avgY < upperStartY || line.avgY > upperEndY) {
+          return false;
+        }
+        
+        // Exclude very large text (likely system UI)
+        if (line.avgArea > 5000) {
+          return false;
+        }
+        
+        return true;
+      });
+      
+      logger.info(`📱 Mobile Debug: Upper area (20%-50%) filtered to ${upperFiltered.length} lines`);
+      
+      // Combine primary and upper candidates
+      const combinedCandidates = [...primaryFiltered, ...upperFiltered];
+      if (combinedCandidates.length >= 2) {
+        logger.info(`📱 Mobile Debug: Combined candidates: ${combinedCandidates.length} total`);
+        return combinedCandidates;
+      }
+    }
+    
+    // FALLBACK STRATEGY: Search in 10%-20% area (upper content area)
+    logger.info('📱 Mobile Debug: Primary area insufficient, trying fallback area (10%-20%)');
     const fallbackStartY = minY + (imageHeight * 0.10);  // 10% from top
-    const fallbackEndY = minY + (imageHeight * 0.25);    // 25% from top (was 20%)
+    const fallbackEndY = minY + (imageHeight * 0.20);    // 20% from top
     
     const fallbackFiltered = lines.filter(line => {
       // Must be in the fallback content area
@@ -213,7 +242,7 @@ class VisionService {
       return true;
     });
     
-    logger.info(`📱 Mobile Debug: Fallback area (10%-25%) filtered to ${fallbackFiltered.length} lines`);
+    logger.info(`📱 Mobile Debug: Fallback area (10%-20%) filtered to ${fallbackFiltered.length} lines`);
     
     // If fallback found candidates, use them
     if (fallbackFiltered.length >= 2) {
@@ -295,14 +324,18 @@ class VisionService {
     const text = line.text.toLowerCase().trim();
     const originalText = line.text.trim();
     
+    logger.debug(`📱 isValidCandidate checking: "${originalText}" (area: ${line.avgArea}, wordCount: ${line.wordCount})`);
+    
     // Basic length and word count filters - be more lenient for single words
     if (text.length < this.config.minCandidateLength || 
         text.length > this.config.maxCandidateLength) {
+        logger.debug(`📱 Rejecting "${originalText}" - length ${text.length} outside range ${this.config.minCandidateLength}-${this.config.maxCandidateLength}`);
         return false;
       }
       
     // For word count: allow single words if they're substantial (like podcast names)
     if (line.wordCount < 1) {
+        logger.debug(`📱 Rejecting "${originalText}" - word count ${line.wordCount} < 1`);
         return false;
       }
       
@@ -324,7 +357,7 @@ class VisionService {
     
     // Exclude very small text (likely thumbnail overlays or UI elements)
     if (line.avgArea < 500) {
-      logger.debug(`Excluding very small text: "${originalText}" (area: ${line.avgArea})`);
+      logger.debug(`📱 Rejecting "${originalText}" - area ${line.avgArea} < 500`);
       return false;
     }
       
