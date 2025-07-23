@@ -1196,7 +1196,19 @@ class VisionService {
         return false;
       }
       
-      // Context analysis for this specific timestamp
+      // Check if this looks like a valid podcast timestamp (MM:SS format)
+      const isPodcastTimestamp = /^\d{1,2}:\d{2}$/.test(candidate.time);
+      const minutes = parseInt(candidate.time.split(':')[0]);
+      const seconds = parseInt(candidate.time.split(':')[1]);
+      const isValidTimeFormat = minutes >= 0 && minutes <= 59 && seconds >= 0 && seconds <= 59;
+      
+      // If it's a valid podcast timestamp format, prioritize it over context analysis
+      if (isPodcastTimestamp && isValidTimeFormat) {
+        logger.info(`📱 Mobile Debug: extractTimestamp - Accepted "${candidate.time}" as valid podcast timestamp format`);
+        return true;
+      }
+      
+      // Context analysis for this specific timestamp (only for non-standard formats)
       const context = this.getTimestampContext(fullText, candidate.time);
       const hasClockContext = this.hasClockContext(context);
       logger.info(`📱 Mobile Debug: extractTimestamp - Context for "${candidate.time}": "${context}" (hasClockContext: ${hasClockContext})`);
@@ -1270,11 +1282,31 @@ class VisionService {
   hasClockContext(context) {
     const clockContextIndicators = [
       /\b(morning|afternoon|evening|night|mañana|tarde|noche)\b/,
-      /\b(today|tomorrow|yesterday|hoy|mañana|ayer)\b/,
-      /\b(scheduled|programado|optimizada|recarga)\b/
+      /\b(today|tomorrow|yesterday|hoy|ayer)\b/,
+      /\b(scheduled|programado)\b/,
+      /\b(4:30a\.m\.|4:30p\.m\.|am|pm)\b/  // Specific clock times
     ];
     
-    return clockContextIndicators.some(pattern => pattern.test(context));
+    // Check if context contains clock indicators
+    const hasClockIndicators = clockContextIndicators.some(pattern => pattern.test(context));
+    
+    // If we have clock indicators, also check if the context suggests this is a system clock
+    // rather than a podcast timestamp by looking for system UI patterns
+    if (hasClockIndicators) {
+      const systemUIPatterns = [
+        /\b(optimizada|recarga|sueño)\b/,  // System UI words that don't indicate clock
+        /\b(para las)\b/  // "for the" - system scheduling language
+      ];
+      
+      // If it's just system UI words without actual clock context, don't exclude
+      const hasSystemUI = systemUIPatterns.some(pattern => pattern.test(context));
+      const hasActualClock = /\b(4:30a\.m\.|4:30p\.m\.|am|pm)\b/.test(context);
+      
+      // Only exclude if it has actual clock indicators, not just system UI
+      return hasActualClock;
+    }
+    
+    return false;
   }
 }
 
