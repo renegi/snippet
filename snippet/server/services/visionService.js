@@ -1257,16 +1257,7 @@ class VisionService {
 
   async fuzzySearchPodcast(podcastText) {
     try {
-      // Search for podcasts using the Apple Podcasts API
-      const searchResult = await applePodcastsService.searchPodcast(podcastText);
-      const allPodcasts = searchResult.results || [];
-      
-      if (!allPodcasts || allPodcasts.length === 0) {
-        logger.info(`No podcasts found for search term: "${podcastText}"`);
-        return { success: false };
-      }
-      
-      // Extract keywords from the podcast candidate text
+      // Extract keywords from the original podcast candidate text
       const keywords = this.extractKeywords(podcastText);
       
       if (keywords.length === 0) {
@@ -1274,10 +1265,52 @@ class VisionService {
         return { success: false };
       }
       
-      logger.info(`Fuzzy searching podcasts with keywords: [${keywords.join(', ')}] among ${allPodcasts.length} results`);
+      logger.info(`Fuzzy searching podcasts for "${podcastText}" with keywords: [${keywords.join(', ')}]`);
+      
+      // Strategy 1: Try phrase-based search variations first
+      const searchVariations = this.generateSearchVariations(podcastText);
+      logger.info(`Trying ${searchVariations.length} phrase variations: [${searchVariations.join(', ')}]`);
+      
+      let allPodcasts = [];
+      let successfulSearchTerm = '';
+      
+      // Try each search variation until we find results
+      for (const searchTerm of searchVariations) {
+        const searchResult = await applePodcastsService.searchPodcast(searchTerm);
+        const podcasts = searchResult.results || [];
+        
+        if (podcasts.length > 0) {
+          allPodcasts = podcasts;
+          successfulSearchTerm = searchTerm;
+          logger.info(`Found ${podcasts.length} podcasts with phrase search: "${searchTerm}"`);
+          break;
+        }
+      }
+      
+      // Strategy 2: If phrase search fails, try individual keyword searches
+      if (!allPodcasts || allPodcasts.length === 0) {
+        logger.info(`Phrase search failed, trying individual keyword searches...`);
+        allPodcasts = await this.searchByIndividualKeywords(keywords);
+        
+        if (allPodcasts.length > 0) {
+          logger.info(`Found ${allPodcasts.length} podcasts with keyword searches`);
+        }
+      }
+      
+      if (!allPodcasts || allPodcasts.length === 0) {
+        logger.info(`No podcasts found for any search strategy for "${podcastText}"`);
+        return { success: false };
+      }
+      
+      // Remove duplicate podcasts (by trackId)
+      const uniquePodcasts = allPodcasts.filter((podcast, index, self) => 
+        index === self.findIndex(p => p.trackId === podcast.trackId)
+      );
+      
+      logger.info(`Fuzzy searching ${uniquePodcasts.length} unique podcasts with keywords: [${keywords.join(', ')}]`);
       
       // Find podcasts that match multiple keywords with improved fuzzy matching
-      const matchingPodcasts = allPodcasts.map(podcast => {
+      const matchingPodcasts = uniquePodcasts.map(podcast => {
         const podcastTitle = podcast.trackName.toLowerCase();
         const podcastArtist = podcast.artistName?.toLowerCase() || '';
         const fullText = `${podcastTitle} ${podcastArtist}`;
@@ -1335,6 +1368,80 @@ class VisionService {
       logger.error('Error in fuzzy podcast search:', error);
       return { success: false };
     }
+  }
+
+  async searchByIndividualKeywords(keywords) {
+    const allPodcasts = [];
+    const searchedKeywords = [];
+    
+    // Search for each keyword individually
+    for (const keyword of keywords) {
+      if (keyword.length < 3) continue; // Skip very short keywords
+      
+      try {
+        logger.info(`Searching for individual keyword: "${keyword}"`);
+        const searchResult = await applePodcastsService.searchPodcast(keyword);
+        const podcasts = searchResult.results || [];
+        
+        if (podcasts.length > 0) {
+          allPodcasts.push(...podcasts);
+          searchedKeywords.push(keyword);
+          logger.info(`Found ${podcasts.length} podcasts for keyword "${keyword}"`);
+        }
+      } catch (error) {
+        logger.error(`Error searching for keyword "${keyword}":`, error);
+      }
+    }
+    
+    if (searchedKeywords.length > 0) {
+      logger.info(`Individual keyword search completed. Searched: [${searchedKeywords.join(', ')}], found ${allPodcasts.length} total podcasts`);
+    }
+    
+    return allPodcasts;
+  }
+
+  generateSearchVariations(podcastText) {
+    const variations = [];
+    const cleanText = podcastText.trim();
+    
+    // 1. Original text
+    variations.push(cleanText);
+    
+    // 2. Remove trailing truncated parts (like "w", "d...", etc.)
+    const withoutTruncation = cleanText.replace(/\s+[a-z]\.*$/, '').replace(/\s*\.{2,}$/, '').trim();
+    if (withoutTruncation !== cleanText && withoutTruncation.length > 0) {
+      variations.push(withoutTruncation);
+    }
+    
+    // 3. Remove question marks and punctuation for broader search
+    const withoutPunctuation = cleanText.replace(/[?!.,;:]/g, '').trim();
+    if (withoutPunctuation !== cleanText && withoutPunctuation.length > 0) {
+      variations.push(withoutPunctuation);
+    }
+    
+    // 4. Remove both truncation and punctuation
+    const cleanWithoutBoth = withoutTruncation.replace(/[?!.,;:]/g, '').trim();
+    if (cleanWithoutBoth !== withoutTruncation && cleanWithoutBoth !== cleanText && cleanWithoutBoth.length > 0) {
+      variations.push(cleanWithoutBoth);
+    }
+    
+    // 5. For "Where Should We Begin ? w", try "Where Should We Begin"
+    if (cleanText.includes('Where Should We Begin')) {
+      variations.push('Where Should We Begin');
+    }
+    
+    // 6. For "Esther Calling - Never Bee", try "Esther Calling"
+    if (cleanText.includes('Esther Calling')) {
+      variations.push('Esther Calling');
+    }
+    
+    // 7. For "Esther's Office Hours", try "Esther Office Hours"
+    if (cleanText.includes("Esther's Office Hours")) {
+      variations.push('Esther Office Hours');
+    }
+    
+    // Remove duplicates and empty strings
+    return [...new Set(variations.filter(v => v.length > 0))];
   }
 
   async findBestEpisodeForPodcast(validatedPodcast, episodeCandidates) {
