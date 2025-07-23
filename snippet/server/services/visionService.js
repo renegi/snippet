@@ -172,15 +172,9 @@ class VisionService {
         return false;
       }
       
-      // Exclude album art region (center area)
-      const centerX = imageWidth / 2;
-      const albumArtRegion = imageWidth * 0.25; // 25% around center for album art
-      const lineX = line.words ? line.words[0].boundingPoly.vertices[0].x : 0;
-      
-      logger.debug(`📱 Checking album art exclusion for "${line.text}" - lineX: ${lineX}, centerX: ${centerX}, albumArtRegion: ${albumArtRegion}`);
-      
-      if (Math.abs(lineX - centerX) < albumArtRegion) {
-        logger.debug(`📱 Excluding album art text: "${line.text}" (lineX: ${lineX}, distance from center: ${Math.abs(lineX - centerX)})`);
+      // Exclude very large text (likely system UI or clock displays)
+      if (line.avgArea > 10000) {
+        logger.debug(`📱 Excluding very large text: "${line.text}" (area: ${line.avgArea})`);
         return false;
       }
       
@@ -362,8 +356,8 @@ class VisionService {
     }
     
     // Exclude very small text (likely thumbnail overlays or UI elements)
-    if (line.avgArea < 500) {
-      logger.debug(`📱 Rejecting "${originalText}" - area ${line.avgArea} < 500`);
+    if (line.avgArea < 200) {
+      logger.debug(`📱 Rejecting "${originalText}" - area ${line.avgArea} < 200`);
       return false;
     }
     
