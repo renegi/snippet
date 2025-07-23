@@ -1041,173 +1041,21 @@ class VisionService {
   }
 
   async fuzzySearchPodcast(podcastText) {
-    try {
-      // Extract keywords from the original podcast candidate text
-      const keywords = this.extractKeywords(podcastText);
-      
-      if (keywords.length === 0) {
-        logger.info(`No keywords extracted from "${podcastText}"`);
-        return { success: false, candidates: [] };
-      }
-      
-      logger.info(`Fuzzy searching podcasts for "${podcastText}" with keywords: [${keywords.join(', ')}]`);
-      
-      // Strategy 1: Try phrase-based search variations first
-      const searchVariations = this.generateSearchVariations(podcastText);
-      logger.info(`Trying ${searchVariations.length} phrase variations: [${searchVariations.join(', ')}]`);
-      
-      let allPodcasts = [];
-      let successfulSearchTerm = '';
-      
-      // Try each search variation until we find results
-      for (const searchTerm of searchVariations) {
-        const searchResult = await applePodcastsService.searchPodcast(searchTerm);
-        const podcasts = searchResult.results || [];
-        
-        if (podcasts.length > 0) {
-          allPodcasts = podcasts;
-          successfulSearchTerm = searchTerm;
-          logger.info(`Found ${podcasts.length} podcasts with phrase search: "${searchTerm}"`);
-          break;
-        }
-      }
-      
-      // Strategy 2: If phrase search fails, try individual keyword searches
-      if (!allPodcasts || allPodcasts.length === 0) {
-        logger.info(`Phrase search failed, trying individual keyword searches...`);
-        allPodcasts = await this.searchByIndividualKeywords(keywords);
-        
-        if (allPodcasts.length > 0) {
-          logger.info(`Found ${allPodcasts.length} podcasts with keyword searches`);
-        }
-      }
-      
-      if (!allPodcasts || allPodcasts.length === 0) {
-        logger.info(`No podcasts found for any search strategy for "${podcastText}"`);
-        return { success: false, candidates: [] };
-      }
-      
-      // Remove duplicate podcasts (by trackId)
-      const uniquePodcasts = allPodcasts.filter((podcast, index, self) => 
-        index === self.findIndex(p => p.trackId === podcast.trackId)
-      );
-      
-      logger.info(`Fuzzy searching ${uniquePodcasts.length} unique podcasts for similarity with "${podcastText}"`);
-      
-      // Calculate similarity scores using Apple Podcasts matching logic
-      const candidatesWithSimilarity = uniquePodcasts.map(podcast => {
-        const similarity = applePodcastsService.calculateSimilarity(podcastText, podcast.trackName);
-        
-        return {
-          podcast,
-          similarity: similarity,
-          confidence: similarity // Use similarity directly as confidence
-        };
-      }).filter(result => result.similarity >= 0.3) // Keep reasonable matches
-        .sort((a, b) => b.similarity - a.similarity); // Best matches first
-      
-      if (candidatesWithSimilarity.length === 0) {
-        logger.info(`No podcasts found with similarity >= 0.3`);
-        return { success: false, candidates: [] };
-      }
-      
-      // Log details for debugging
-      candidatesWithSimilarity.forEach(candidate => {
-        logger.info(`Podcast candidate: "${candidate.podcast.trackName}" - similarity: ${candidate.similarity.toFixed(3)}, confidence: ${candidate.confidence.toFixed(3)}`);
-      });
-      
-      // Find high-confidence candidates (>= 0.85 similarity)
-      const highConfidenceCandidates = candidatesWithSimilarity.filter(c => c.similarity >= 0.85);
-      
-      if (highConfidenceCandidates.length > 0) {
-        logger.info(`Found ${highConfidenceCandidates.length} high-confidence candidates (>= 0.85): ${highConfidenceCandidates.map(c => `"${c.podcast.trackName}" (${c.similarity.toFixed(3)})`).join(', ')}`);
-      }
-      
-      return {
-        success: true,
-        candidates: candidatesWithSimilarity,
-        highConfidenceCandidates: highConfidenceCandidates,
-        bestMatch: candidatesWithSimilarity[0]
-      };
-      
-    } catch (error) {
-      logger.error('Error in fuzzy podcast search:', error);
-      return { success: false, candidates: [] };
-    }
+    // This function is no longer used - replaced by simplified two-phase approach
+    logger.info(`fuzzySearchPodcast called but deprecated - using simplified approach instead`);
+    return { success: false, candidates: [] };
   }
 
   async searchByIndividualKeywords(keywords) {
-    const allPodcasts = [];
-    const searchedKeywords = [];
-    
-    // Search for each keyword individually
-    for (const keyword of keywords) {
-      if (keyword.length < 3) continue; // Skip very short keywords
-      
-      try {
-        logger.info(`Searching for individual keyword: "${keyword}"`);
-        const searchResult = await applePodcastsService.searchPodcast(keyword);
-        const podcasts = searchResult.results || [];
-        
-        if (podcasts.length > 0) {
-          allPodcasts.push(...podcasts);
-          searchedKeywords.push(keyword);
-          logger.info(`Found ${podcasts.length} podcasts for keyword "${keyword}"`);
-        }
-      } catch (error) {
-        logger.error(`Error searching for keyword "${keyword}":`, error);
-      }
-    }
-    
-    if (searchedKeywords.length > 0) {
-      logger.info(`Individual keyword search completed. Searched: [${searchedKeywords.join(', ')}], found ${allPodcasts.length} total podcasts`);
-    }
-    
-    return allPodcasts;
+    // This function is no longer used - replaced by simplified two-phase approach
+    logger.info(`searchByIndividualKeywords called but deprecated - using simplified approach instead`);
+    return [];
   }
 
   generateSearchVariations(podcastText) {
-    const variations = [];
-    const cleanText = podcastText.trim();
-    
-    // 1. Original text
-    variations.push(cleanText);
-    
-    // 2. Remove trailing truncated parts (like "w", "d...", etc.)
-    const withoutTruncation = cleanText.replace(/\s+[a-z]\.*$/, '').replace(/\s*\.{2,}$/, '').trim();
-    if (withoutTruncation !== cleanText && withoutTruncation.length > 0) {
-      variations.push(withoutTruncation);
-    }
-    
-    // 3. Remove question marks and punctuation for broader search
-    const withoutPunctuation = cleanText.replace(/[?!.,;:]/g, '').trim();
-    if (withoutPunctuation !== cleanText && withoutPunctuation.length > 0) {
-      variations.push(withoutPunctuation);
-    }
-    
-    // 4. Remove both truncation and punctuation
-    const cleanWithoutBoth = withoutTruncation.replace(/[?!.,;:]/g, '').trim();
-    if (cleanWithoutBoth !== withoutTruncation && cleanWithoutBoth !== cleanText && cleanWithoutBoth.length > 0) {
-      variations.push(cleanWithoutBoth);
-    }
-    
-    // 5. For "Where Should We Begin ? w", try "Where Should We Begin"
-    if (cleanText.includes('Where Should We Begin')) {
-      variations.push('Where Should We Begin');
-    }
-    
-    // 6. For "Esther Calling - Never Bee", try "Esther Calling"
-    if (cleanText.includes('Esther Calling')) {
-      variations.push('Esther Calling');
-    }
-    
-    // 7. For "Esther's Office Hours", try "Esther Office Hours"
-    if (cleanText.includes("Esther's Office Hours")) {
-      variations.push('Esther Office Hours');
-    }
-    
-    // Remove duplicates and empty strings
-    return [...new Set(variations.filter(v => v.length > 0))];
+    // This function is no longer used - replaced by simplified two-phase approach
+    logger.info(`generateSearchVariations called but deprecated - using simplified approach instead`);
+    return [];
   }
 
   async findBestEpisodeForPodcast(validatedPodcast, episodeCandidates) {
@@ -1488,7 +1336,7 @@ class VisionService {
 
   async validatePodcastWithEpisodeValidation(podcastText, episodeText) {
     try {
-      logger.info(`Starting improved validation flow for podcast="${podcastText}" episode="${episodeText}"`);
+      logger.info(`Starting simplified validation flow for podcast="${podcastText}" episode="${episodeText}"`);
       
       // Step 1: Exact search
       logger.info(`Step 1: Trying exact podcast search for "${podcastText}"`);
@@ -1504,91 +1352,25 @@ class VisionService {
         }
       }
       
-      // Step 2: Fuzzy search with cleaned up text - check after each variation
-      logger.info(`Step 2: Trying fuzzy search with cleaned up text for "${podcastText}"`);
+      // Phase 1: Fuzzy podcast search of cleaned up text
+      logger.info(`Phase 1: Fuzzy podcast search of cleaned up text for "${podcastText}"`);
+      const cleanedText = this.cleanTextForSearch(podcastText);
+      logger.info(`Cleaned text: "${cleanedText}"`);
       
-      // Extract keywords for search variations
-      const keywords = this.extractKeywords(podcastText);
-      const searchVariations = this.generateSearchVariations(podcastText);
-      logger.info(`Trying ${searchVariations.length} phrase variations: [${searchVariations.join(', ')}]`);
-      
-      // Try each search variation and check for high-confidence candidates immediately
-      for (const searchTerm of searchVariations) {
-        const searchResult = await applePodcastsService.searchPodcast(searchTerm);
-        const podcasts = searchResult.results || [];
-        
-        if (podcasts.length > 0) {
-          logger.info(`Found ${podcasts.length} podcasts with phrase search: "${searchTerm}"`);
-          
-          // Calculate similarity scores for this batch
-          const candidatesWithSimilarity = podcasts.map(podcast => {
-            const similarity = applePodcastsService.calculateSimilarity(podcastText, podcast.trackName);
-            return {
-              podcast,
-              similarity: similarity,
-              confidence: similarity
-            };
-          }).filter(result => result.similarity >= 0.85) // Only high-confidence candidates
-            .sort((a, b) => b.similarity - a.similarity);
-          
-          if (candidatesWithSimilarity.length > 0) {
-            logger.info(`Found ${candidatesWithSimilarity.length} high-confidence candidates (>= 0.85): ${candidatesWithSimilarity.map(c => `"${c.podcast.trackName}" (${c.similarity.toFixed(3)})`).join(', ')}`);
-            
-            // Try episode validation with each high-confidence candidate
-            for (const candidate of candidatesWithSimilarity) {
-              const validatedPodcast = {
-                id: candidate.podcast.trackId,
-                title: candidate.podcast.trackName,
-                artist: candidate.podcast.artistName,
-                artworkUrl: candidate.podcast.artworkUrl100 || candidate.podcast.artworkUrl600,
-                confidence: candidate.confidence
-              };
-              
-              const episodeResult = await this.tryEpisodeValidation(validatedPodcast, episodeText, 'fuzzy_cleaned');
-              if (episodeResult.success) {
-                return episodeResult;
-              }
-            }
-          }
-        }
+      const phase1Result = await this.searchPodcastsAndValidateEpisodes(cleanedText, episodeText, 'phase1_cleaned');
+      if (phase1Result.success) {
+        return phase1Result;
       }
       
-      // Step 3: If no high-confidence candidates found in phrase search, try keyword search
-      logger.info(`Step 3: Trying individual keyword searches for "${podcastText}"`);
-      const keywordPodcasts = await this.searchByIndividualKeywords(keywords);
-      
-      if (keywordPodcasts.length > 0) {
-        logger.info(`Found ${keywordPodcasts.length} podcasts with keyword searches`);
+      // Phase 2: Fuzzy podcast search with middle words
+      logger.info(`Phase 2: Fuzzy podcast search with middle words for "${cleanedText}"`);
+      const middleWords = this.getMiddleWords(cleanedText);
+      if (middleWords) {
+        logger.info(`Middle words: "${middleWords}"`);
         
-        // Calculate similarity scores for keyword results
-        const candidatesWithSimilarity = keywordPodcasts.map(podcast => {
-          const similarity = applePodcastsService.calculateSimilarity(podcastText, podcast.trackName);
-          return {
-            podcast,
-            similarity: similarity,
-            confidence: similarity
-          };
-        }).filter(result => result.similarity >= 0.85) // Only high-confidence candidates
-          .sort((a, b) => b.similarity - a.similarity);
-        
-        if (candidatesWithSimilarity.length > 0) {
-          logger.info(`Found ${candidatesWithSimilarity.length} high-confidence candidates from keywords (>= 0.85): ${candidatesWithSimilarity.map(c => `"${c.podcast.trackName}" (${c.similarity.toFixed(3)})`).join(', ')}`);
-          
-          // Try episode validation with each high-confidence candidate
-          for (const candidate of candidatesWithSimilarity) {
-            const validatedPodcast = {
-              id: candidate.podcast.trackId,
-              title: candidate.podcast.trackName,
-              artist: candidate.podcast.artistName,
-              artworkUrl: candidate.podcast.artworkUrl100 || candidate.podcast.artworkUrl600,
-              confidence: candidate.confidence
-            };
-            
-            const episodeResult = await this.tryEpisodeValidation(validatedPodcast, episodeText, 'fuzzy_keywords');
-            if (episodeResult.success) {
-              return episodeResult;
-            }
-          }
+        const phase2Result = await this.searchPodcastsAndValidateEpisodes(middleWords, episodeText, 'phase2_middle');
+        if (phase2Result.success) {
+          return phase2Result;
         }
       }
       
@@ -1597,6 +1379,90 @@ class VisionService {
       
     } catch (error) {
       logger.error('Error in validatePodcastWithEpisodeValidation:', error);
+      return { success: false };
+    }
+  }
+
+  cleanTextForSearch(text) {
+    // Remove punctuation and normalize
+    let cleaned = text.toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    // Remove incomplete words (single letters or very short fragments)
+    const words = cleaned.split(/\s+/).filter(word => {
+      // Keep words that are at least 2 characters long
+      return word.length >= 2;
+    });
+    
+    return words.join(' ');
+  }
+
+  getMiddleWords(text) {
+    const words = text.split(/\s+/).filter(word => word.length > 0);
+    if (words.length <= 2) {
+      return null; // Need at least 3 words to have middle words
+    }
+    
+    // Remove first and last word, keep the middle
+    const middleWords = words.slice(1, -1);
+    return middleWords.join(' ');
+  }
+
+  async searchPodcastsAndValidateEpisodes(searchText, episodeText, phase) {
+    try {
+      logger.info(`Searching podcasts with "${searchText}" (${phase})`);
+      
+      const searchResult = await applePodcastsService.searchPodcast(searchText);
+      const podcasts = searchResult.results || [];
+      
+      if (podcasts.length === 0) {
+        logger.info(`No podcasts found for "${searchText}" (${phase})`);
+        return { success: false };
+      }
+      
+      logger.info(`Found ${podcasts.length} podcasts for "${searchText}" (${phase})`);
+      
+      // Calculate similarity scores and find high-confidence candidates
+      const candidatesWithSimilarity = podcasts.map(podcast => {
+        const similarity = applePodcastsService.calculateSimilarity(searchText, podcast.trackName);
+        return {
+          podcast,
+          similarity: similarity,
+          confidence: similarity
+        };
+      }).filter(result => result.similarity >= 0.85) // Only high-confidence candidates
+        .sort((a, b) => b.similarity - a.similarity);
+      
+      if (candidatesWithSimilarity.length === 0) {
+        logger.info(`No high-confidence candidates (>= 0.85) found for "${searchText}" (${phase})`);
+        return { success: false };
+      }
+      
+      logger.info(`Found ${candidatesWithSimilarity.length} high-confidence candidates (>= 0.85) for "${searchText}" (${phase}): ${candidatesWithSimilarity.map(c => `"${c.podcast.trackName}" (${c.similarity.toFixed(3)})`).join(', ')}`);
+      
+      // Try episode validation with each high-confidence candidate
+      for (const candidate of candidatesWithSimilarity) {
+        const validatedPodcast = {
+          id: candidate.podcast.trackId,
+          title: candidate.podcast.trackName,
+          artist: candidate.podcast.artistName,
+          artworkUrl: candidate.podcast.artworkUrl100 || candidate.podcast.artworkUrl600,
+          confidence: candidate.confidence
+        };
+        
+        const episodeResult = await this.tryEpisodeValidation(validatedPodcast, episodeText, phase);
+        if (episodeResult.success) {
+          return episodeResult;
+        }
+      }
+      
+      logger.info(`No episode validation successful for "${searchText}" (${phase})`);
+      return { success: false };
+      
+    } catch (error) {
+      logger.error(`Error in searchPodcastsAndValidateEpisodes (${phase}):`, error);
       return { success: false };
     }
   }
