@@ -324,7 +324,7 @@ class VisionService {
     const text = line.text.toLowerCase().trim();
     const originalText = line.text.trim();
     
-    logger.debug(`📱 isValidCandidate checking: "${originalText}" (area: ${line.avgArea}, wordCount: ${line.wordCount})`);
+    logger.debug(`📱 isValidCandidate checking: "${originalText}" (area: ${line.avgArea}, wordCount: ${line.wordCount}, length: ${text.length}, config range: ${this.config.minCandidateLength}-${this.config.maxCandidateLength})`);
     
     // Basic length and word count filters - be more lenient for single words
     if (text.length < this.config.minCandidateLength || 
@@ -351,7 +351,7 @@ class VisionService {
     ];
     
     if (systemUITexts.some(systemText => text.includes(systemText))) {
-      logger.debug(`Excluding system UI text: "${originalText}"`);
+      logger.debug(`📱 Rejecting "${originalText}" - system UI text`);
       return false;
     }
     
@@ -402,6 +402,7 @@ class VisionService {
         originalText.length > 3 && 
         originalText.length < 15 && 
         line.wordCount <= 2) {
+      logger.debug(`📱 Rejecting "${originalText}" - all caps and short (length: ${originalText.length}, words: ${line.wordCount})`);
       return false;
     }
     
@@ -410,6 +411,7 @@ class VisionService {
     if (/^[a-z]/.test(originalText)) {
       // Allow if it's substantial content (longer than 10 chars or contains meaningful words)
       if (text.length < 10 && !text.includes('market') && !text.includes('podcast') && !text.includes('episode')) {
+        logger.debug(`📱 Rejecting "${originalText}" - starts with lowercase and too short (length: ${text.length})`);
         return false;
       }
     }
