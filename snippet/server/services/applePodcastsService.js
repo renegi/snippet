@@ -474,6 +474,7 @@ class ApplePodcastsService {
       }
       
       logger.info(`Fuzzy searching with keywords: [${keywords.join(', ')}] among ${allEpisodes.length} episodes`);
+      logger.info(`Keywords breakdown: ${keywords.length} keywords from "${episodeTitle}"`);
       
       // Find episodes that match multiple keywords with improved fuzzy matching
       const matchingEpisodes = allEpisodes.map(episode => {
@@ -497,6 +498,11 @@ class ApplePodcastsService {
         const totalMatches = exactMatches.length + (partialMatches.length * 0.5);
         const matchScore = totalMatches / keywords.length;
         
+        // Log detailed matching info for debugging
+        if (matchScore >= 0.1) { // Log any episode with at least 10% match
+          logger.info(`Episode "${episode.title}" - Score: ${matchScore.toFixed(2)}, Exact: [${exactMatches.join(', ')}], Partial: [${partialMatches.filter(k => !exactMatches.includes(k)).join(', ')}]`);
+        }
+        
         return {
           episode,
           matchedKeywords: [...exactMatches, ...partialMatches.filter(k => !exactMatches.includes(k))],
@@ -504,11 +510,30 @@ class ApplePodcastsService {
           exactMatches: exactMatches.length,
           partialMatches: partialMatches.length
         };
-      }).filter(result => result !== null && result.matchScore >= 0.3) // Minimum 30% keyword match required
-        .sort((a, b) => b.matchScore - a.matchScore); // Best matches first
+      }).filter(result => result !== null && result.matchScore >= 0.5) // Single threshold of 0.5 (50% keyword match required)
+        .sort((a, b) => {
+          // Primary sort: by match score (highest first)
+          if (b.matchScore !== a.matchScore) {
+            return b.matchScore - a.matchScore;
+          }
+          
+          // Tie-breaking: by release date (newer first)
+          const dateA = a.episode.releaseDate ? new Date(a.episode.releaseDate) : new Date(0);
+          const dateB = b.episode.releaseDate ? new Date(b.episode.releaseDate) : new Date(0);
+          return dateB - dateA;
+        });
       
       if (matchingEpisodes.length > 0) {
         const bestMatch = matchingEpisodes[0];
+        
+        // Log if there were multiple candidates with the same score
+        if (matchingEpisodes.length > 1 && matchingEpisodes[1].matchScore === bestMatch.matchScore) {
+          logger.info(`Tie detected! Multiple episodes with score ${bestMatch.matchScore.toFixed(2)}. Selected newest: "${bestMatch.episode.title}" (${bestMatch.episode.releaseDate || 'no date'})`);
+          logger.info(`Other candidates with same score:`, matchingEpisodes.slice(1, 4).map(m => 
+            `"${m.episode.title}" (${m.episode.releaseDate || 'no date'})`
+          ));
+        }
+        
         logger.info(`Best fuzzy match: "${bestMatch.episode.title}" (score: ${bestMatch.matchScore.toFixed(2)}, exact: ${bestMatch.exactMatches}, partial: ${bestMatch.partialMatches})`);
         
         return {
@@ -527,7 +552,7 @@ class ApplePodcastsService {
         };
       }
       
-      logger.info(`No episodes found with match score >= 0.3`);
+      logger.info(`No episodes found with match score >= 0.5`);
       return { validatedEpisode: null };
       
     } catch (error) {
