@@ -24,13 +24,25 @@ class ApplePodcastsService {
       // Search for podcast first
       let podcastResult = null;
       if (podcastTitle) {
+        // Try exact search first
         podcastResult = await this.searchPodcast(podcastTitle);
+        
+        // If exact search fails and we have an episode title, try fuzzy search
+        if (!podcastResult?.validatedPodcast && episodeTitle) {
+          logger.info(`Exact podcast search failed for "${podcastTitle}", trying fuzzy search`);
+          podcastResult = await this.fuzzySearchPodcast(podcastTitle, episodeTitle);
+        }
       }
 
       // Search for episode if we have episode title
       let episodeResult = null;
       if (episodeTitle && podcastResult?.validatedPodcast) {
-        episodeResult = await this.searchEpisode(episodeTitle, podcastResult.validatedPodcast.id);
+        // If fuzzy search already found an episode, use it
+        if (podcastResult.validatedEpisode) {
+          episodeResult = { validatedEpisode: podcastResult.validatedEpisode };
+        } else {
+          episodeResult = await this.searchEpisode(episodeTitle, podcastResult.validatedPodcast.id);
+        }
       }
 
       // Calculate confidence based on results
@@ -183,6 +195,12 @@ class ApplePodcastsService {
         artworkUrl: result.artworkUrl100 || result.artworkUrl600,
         confidence: this.calculateSimilarity(searchTerm, result.collectionName)
       }));
+      
+      // Log the top candidates for debugging
+      const topCandidates = podcasts.slice(0, 3);
+      logger.info(`Top podcast candidates for "${searchTerm}":`, topCandidates.map(p => 
+        `"${p.title}" (confidence: ${p.confidence.toFixed(3)})`
+      ));
 
       return { podcasts };
 
@@ -192,14 +210,202 @@ class ApplePodcastsService {
     }
   }
 
+  async fuzzySearchPodcast(podcastTitle, episodeTitle) {
+    try {
+      logger.info(`Starting fuzzy podcast search for "${podcastTitle}" with episode "${episodeTitle}"`);
+      
+      // Phase 1: Fuzzy podcast search of cleaned up text
+      const phase1Result = await this.fuzzySearchPodcastPhase1(podcastTitle, episodeTitle);
+      if (phase1Result?.validatedPodcast) {
+        logger.info(`Phase 1 fuzzy search successful: "${podcastTitle}" → "${phase1Result.validatedPodcast.title}"`);
+        return phase1Result;
+      }
+      
+      // Phase 2: Fuzzy podcast search with middle words
+      const phase2Result = await this.fuzzySearchPodcastPhase2(podcastTitle, episodeTitle);
+      if (phase2Result?.validatedPodcast) {
+        logger.info(`Phase 2 fuzzy search successful: "${podcastTitle}" → "${phase2Result.validatedPodcast.title}"`);
+        return phase2Result;
+      }
+      
+      logger.info(`Fuzzy podcast search failed for "${podcastTitle}"`);
+      return { validatedPodcast: null };
+      
+    } catch (error) {
+      logger.error('Error in fuzzy podcast search:', error);
+      return { validatedPodcast: null, error: error.message };
+    }
+  }
+
+  async fuzzySearchPodcastPhase1(podcastTitle, episodeTitle) {
+    try {
+      logger.info(`Phase 1: Fuzzy search with cleaned text for "${podcastTitle}"`);
+      
+      // Step 1: Remove punctuation and partial words
+      const cleanedText = this.cleanPodcastText(podcastTitle);
+      logger.info(`Cleaned text: "${cleanedText}"`);
+      
+      if (!cleanedText || cleanedText.length < 3) {
+        logger.info(`Cleaned text too short: "${cleanedText}"`);
+        return { validatedPodcast: null };
+      }
+      
+      // Step 2: Do a fuzzy search
+      const searchResult = await this.searchMultiplePodcasts(cleanedText);
+      const candidates = searchResult.podcasts || [];
+      
+      logger.info(`Found ${candidates.length} podcast candidates for "${cleanedText}"`);
+      
+      // Step 3: Check if any candidates have .85 or greater similarity score
+      const highConfidenceCandidates = candidates.filter(candidate => candidate.confidence >= 0.85);
+      
+      if (highConfidenceCandidates.length === 0) {
+        logger.info(`No candidates with confidence >= 0.85 for "${cleanedText}"`);
+        return { validatedPodcast: null };
+      }
+      
+      logger.info(`Found ${highConfidenceCandidates.length} high-confidence candidates`);
+      
+      // Step 4: Do an episode search for each candidate with .85 or greater similarity score
+      for (const candidate of highConfidenceCandidates) {
+        logger.info(`Testing candidate: "${candidate.title}" (confidence: ${candidate.confidence.toFixed(3)})`);
+        
+        const episodeResult = await this.searchEpisode(episodeTitle, candidate.id);
+        if (episodeResult?.validatedEpisode) {
+          logger.info(`Episode found in candidate "${candidate.title}": "${episodeResult.validatedEpisode.title}"`);
+          return {
+            validatedPodcast: {
+              id: candidate.id,
+              title: candidate.title,
+              artist: candidate.artist,
+              feedUrl: candidate.feedUrl,
+              artworkUrl: candidate.artworkUrl,
+              confidence: candidate.confidence
+            },
+            validatedEpisode: episodeResult.validatedEpisode
+          };
+        } else {
+          logger.info(`No episode found in candidate "${candidate.title}" for episode "${episodeTitle}"`);
+        }
+      }
+      
+      logger.info(`No valid episodes found in any high-confidence candidates`);
+      return { validatedPodcast: null };
+      
+    } catch (error) {
+      logger.error('Error in Phase 1 fuzzy podcast search:', error);
+      return { validatedPodcast: null, error: error.message };
+    }
+  }
+
+  async fuzzySearchPodcastPhase2(podcastTitle, episodeTitle) {
+    try {
+      logger.info(`Phase 2: Fuzzy search with middle words for "${podcastTitle}"`);
+      
+      // Step 1: Using the cleaned up text, remove the first and last word
+      const cleanedText = this.cleanPodcastText(podcastTitle);
+      const words = cleanedText.split(/\s+/).filter(word => word.length > 0);
+      
+      if (words.length < 3) {
+        logger.info(`Not enough words for Phase 2: "${cleanedText}" (${words.length} words)`);
+        return { validatedPodcast: null };
+      }
+      
+      // Remove first and last word
+      const middleWords = words.slice(1, -1).join(' ');
+      logger.info(`Middle words: "${middleWords}"`);
+      
+      if (!middleWords || middleWords.length < 3) {
+        logger.info(`Middle words too short: "${middleWords}"`);
+        return { validatedPodcast: null };
+      }
+      
+      // Step 2: Do a fuzzy search of the remaining words
+      const searchResult = await this.searchMultiplePodcasts(middleWords);
+      const candidates = searchResult.podcasts || [];
+      
+      logger.info(`Found ${candidates.length} podcast candidates for middle words "${middleWords}"`);
+      
+      // Step 3: Check if any candidates have .85 or greater similarity score
+      const highConfidenceCandidates = candidates.filter(candidate => candidate.confidence >= 0.85);
+      
+      if (highConfidenceCandidates.length === 0) {
+        logger.info(`No candidates with confidence >= 0.85 for middle words "${middleWords}"`);
+        return { validatedPodcast: null };
+      }
+      
+      logger.info(`Found ${highConfidenceCandidates.length} high-confidence candidates for middle words`);
+      
+      // Step 4: Do an episode search for each candidate with .85 or greater similarity score
+      for (const candidate of highConfidenceCandidates) {
+        logger.info(`Testing candidate: "${candidate.title}" (confidence: ${candidate.confidence.toFixed(3)})`);
+        
+        const episodeResult = await this.searchEpisode(episodeTitle, candidate.id);
+        if (episodeResult?.validatedEpisode) {
+          logger.info(`Episode found in candidate "${candidate.title}": "${episodeResult.validatedEpisode.title}"`);
+          return {
+            validatedPodcast: {
+              id: candidate.id,
+              title: candidate.title,
+              artist: candidate.artist,
+              feedUrl: candidate.feedUrl,
+              artworkUrl: candidate.artworkUrl,
+              confidence: candidate.confidence
+            },
+            validatedEpisode: episodeResult.validatedEpisode
+          };
+        } else {
+          logger.info(`No episode found in candidate "${candidate.title}" for episode "${episodeTitle}"`);
+        }
+      }
+      
+      logger.info(`No valid episodes found in any high-confidence candidates for middle words`);
+      return { validatedPodcast: null };
+      
+    } catch (error) {
+      logger.error('Error in Phase 2 fuzzy podcast search:', error);
+      return { validatedPodcast: null, error: error.message };
+    }
+  }
+
+  cleanPodcastText(text) {
+    if (!text) return '';
+    
+    logger.info(`Cleaning podcast text: "${text}"`);
+    
+    // Remove punctuation and normalize
+    let cleaned = text.toLowerCase().trim();
+    
+    // Remove common punctuation
+    cleaned = cleaned.replace(/[^\w\s]/g, ' ');
+    
+    // Remove partial words (words that end with common truncation patterns)
+    const words = cleaned.split(/\s+/).filter(word => {
+      // Keep words that are complete or don't end with common truncation patterns
+      return word.length > 0 && !word.endsWith('w') && !word.endsWith('...') && !word.endsWith('…');
+    });
+    
+    // Join back together
+    cleaned = words.join(' ');
+    
+    logger.info(`Cleaned podcast text: "${text}" → "${cleaned}"`);
+    
+    return cleaned;
+  }
+
   async searchEpisode(episodeTitle, podcastId) {
     try {
+      logger.info(`Searching for episode: "${episodeTitle}" in podcast ${podcastId}`);
+      
       if (!podcastId) {
+        logger.info(`No podcast ID provided for episode search`);
         return { validatedEpisode: null };
       }
 
       const searchTerm = encodeURIComponent(episodeTitle);
       const url = `${this.baseUrl}/lookup?id=${podcastId}&entity=podcastEpisode&limit=200`;
+
+      logger.info(`Episode search URL: ${url}`);
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -209,18 +415,24 @@ class ApplePodcastsService {
       const data = await response.json();
       const results = data.results || [];
 
+      logger.info(`Episode search returned ${results.length} episodes for podcast ${podcastId}`);
+
       if (results.length === 0) {
+        logger.info(`No episodes found for podcast ${podcastId}`);
         return { validatedEpisode: null };
       }
 
       // Find the best match with improved logic for truncated titles
       const bestMatch = this.findBestMatch(episodeTitle, results);
       
+      logger.info(`Best episode match for "${episodeTitle}": "${bestMatch?.result?.trackName || 'none'}" (similarity: ${bestMatch?.similarity?.toFixed(3) || 'undefined'})`);
+      
       // NEW: Much lower threshold for episode validation to handle truncated titles
       // Also check for substring matches which are common with truncated episode titles
       const threshold = 0.2; // Lowered from 0.4 to handle more truncated titles
       
       if (bestMatch && bestMatch.similarity > threshold) {
+        logger.info(`Episode validation SUCCESS: "${episodeTitle}" → "${bestMatch.result.trackName}" (similarity: ${bestMatch.similarity.toFixed(3)} >= ${threshold})`);
         return {
           validatedEpisode: {
             id: bestMatch.result.trackId,
@@ -233,6 +445,7 @@ class ApplePodcastsService {
         };
       }
 
+      logger.info(`Episode validation FAILED: "${episodeTitle}" (similarity: ${bestMatch?.similarity?.toFixed(3) || 'undefined'} < ${threshold})`);
       return { validatedEpisode: null };
 
     } catch (error) {
