@@ -1131,9 +1131,20 @@ class VisionService {
     const fullText = textAnnotations[0].description;
     const individualTexts = textAnnotations.slice(1);
     
+    logger.info(`📱 Mobile Debug: extractTimestamp - Full text length: ${fullText.length}`);
+    logger.info(`📱 Mobile Debug: extractTimestamp - Individual texts count: ${individualTexts.length}`);
+    
     // Group words into lines and apply the same 50%-87.5% position filtering
     const lines = this.groupWordsIntoLines(individualTexts);
     const filteredLines = this.filterByPosition(lines);
+    
+    logger.info(`📱 Mobile Debug: extractTimestamp - Lines after grouping: ${lines.length}`);
+    logger.info(`📱 Mobile Debug: extractTimestamp - Lines after position filtering: ${filteredLines.length}`);
+    
+    // Log all lines for debugging
+    filteredLines.forEach((line, index) => {
+      logger.info(`📱 Mobile Debug: extractTimestamp - Line ${index}: "${line.text}" (Y: ${line.avgY}, Area: ${line.avgArea})`);
+    });
     
     // Extract time patterns from filtered lines only
     const timeRegex = /\b(\d{1,2}:\d{2}(?::\d{2})?)\b/g;
@@ -1151,47 +1162,93 @@ class VisionService {
       });
     });
     
+    logger.info(`📱 Mobile Debug: extractTimestamp - Candidate timestamps found: ${candidateTimestamps.length}`);
+    candidateTimestamps.forEach((candidate, index) => {
+      logger.info(`📱 Mobile Debug: extractTimestamp - Candidate ${index}: "${candidate.time}" (Y: ${candidate.y}, Area: ${candidate.area})`);
+    });
+    
     if (candidateTimestamps.length === 0) {
+      logger.info(`📱 Mobile Debug: extractTimestamp - No candidates in filtered lines, trying fallback`);
       // Fallback: extract from full text but still filter clock times
       const allTimes = [...fullText.matchAll(timeRegex)].map(m => m[0]);
-      return this.filterClockTimes(allTimes, fullText);
+      logger.info(`📱 Mobile Debug: extractTimestamp - All times in full text: ${allTimes.join(', ')}`);
+      const fallbackResult = this.filterClockTimes(allTimes, fullText);
+      logger.info(`📱 Mobile Debug: extractTimestamp - Fallback result: ${fallbackResult}`);
+      return fallbackResult;
     }
     
     // Filter out clock times and UI timestamps
     const podcastTimestamps = candidateTimestamps.filter(candidate => {
+      logger.info(`📱 Mobile Debug: extractTimestamp - Filtering candidate: "${candidate.time}"`);
+      
       // Exclude very large text (likely clock display)
       if (candidate.area > 5000) {
+        logger.info(`📱 Mobile Debug: extractTimestamp - Excluded "${candidate.time}" due to large area: ${candidate.area}`);
         return false;
       }
       
       // Exclude negative timestamps (remaining time)
       if (fullText.includes('-' + candidate.time)) {
+        logger.info(`📱 Mobile Debug: extractTimestamp - Excluded "${candidate.time}" due to negative timestamp`);
         return false;
       }
       
       // Context analysis for this specific timestamp
       const context = this.getTimestampContext(fullText, candidate.time);
-      return !this.hasClockContext(context);
+      const hasClockContext = this.hasClockContext(context);
+      logger.info(`📱 Mobile Debug: extractTimestamp - Context for "${candidate.time}": "${context}" (hasClockContext: ${hasClockContext})`);
+      
+      if (hasClockContext) {
+        logger.info(`📱 Mobile Debug: extractTimestamp - Excluded "${candidate.time}" due to clock context`);
+        return false;
+      }
+      
+      logger.info(`📱 Mobile Debug: extractTimestamp - Accepted "${candidate.time}" as valid timestamp`);
+      return true;
+    });
+    
+    logger.info(`📱 Mobile Debug: extractTimestamp - Final podcast timestamps: ${podcastTimestamps.length}`);
+    podcastTimestamps.forEach((candidate, index) => {
+      logger.info(`📱 Mobile Debug: extractTimestamp - Final candidate ${index}: "${candidate.time}" (Y: ${candidate.y})`);
     });
     
     // Sort by Y position (prefer timestamps lower on screen in content area)
     podcastTimestamps.sort((a, b) => b.y - a.y);
     
-    return podcastTimestamps.length > 0 ? podcastTimestamps[0].time : null;
+    const result = podcastTimestamps.length > 0 ? podcastTimestamps[0].time : null;
+    logger.info(`📱 Mobile Debug: extractTimestamp - Final result: ${result}`);
+    return result;
   }
   
   filterClockTimes(times, fullText) {
+    logger.info(`📱 Mobile Debug: filterClockTimes - Input times: ${times.join(', ')}`);
+    
     const filteredTimes = times.filter(time => {
+      logger.info(`📱 Mobile Debug: filterClockTimes - Processing time: "${time}"`);
+      
       // Exclude negative timestamps
       if (fullText.includes('-' + time)) {
+        logger.info(`📱 Mobile Debug: filterClockTimes - Excluded "${time}" due to negative timestamp`);
         return false;
       }
       
       const context = this.getTimestampContext(fullText, time);
-      return !this.hasClockContext(context);
+      const hasClockContext = this.hasClockContext(context);
+      logger.info(`📱 Mobile Debug: filterClockTimes - Context for "${time}": "${context}" (hasClockContext: ${hasClockContext})`);
+      
+      if (hasClockContext) {
+        logger.info(`📱 Mobile Debug: filterClockTimes - Excluded "${time}" due to clock context`);
+        return false;
+      }
+      
+      logger.info(`📱 Mobile Debug: filterClockTimes - Accepted "${time}" as valid timestamp`);
+      return true;
     });
     
-    return filteredTimes.length > 0 ? filteredTimes[0] : null;
+    logger.info(`📱 Mobile Debug: filterClockTimes - Final filtered times: ${filteredTimes.join(', ')}`);
+    const result = filteredTimes.length > 0 ? filteredTimes[0] : null;
+    logger.info(`📱 Mobile Debug: filterClockTimes - Final result: ${result}`);
+    return result;
   }
   
   getTimestampContext(fullText, time) {
