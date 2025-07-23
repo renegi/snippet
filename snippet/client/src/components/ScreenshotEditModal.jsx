@@ -256,6 +256,8 @@ const ScreenshotEditModal = ({
                     placeholder="Search for a podcast..."
                     className="w-full px-4 py-3 pr-12 border border-[#DDDAD1] rounded-[16px] focus:outline-none focus:ring-2 focus:ring-[#1B1B1B] focus:border-[#1B1B1B] bg-white text-[#1B1B1B] font-['Termina']"
                     onFocus={(e) => {
+                      // Select all text in the field
+                      e.target.select();
                       // Scroll the input to the top of the screen
                       setTimeout(() => {
                         e.target.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -321,6 +323,8 @@ const ScreenshotEditModal = ({
                     !selectedPodcast ? 'bg-[#E4E0D2] cursor-not-allowed opacity-50' : ''
                   }`}
                   onFocus={(e) => {
+                    // Select all text in the field
+                    e.target.select();
                     // Scroll the input to the top of the screen
                     setTimeout(() => {
                       e.target.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -351,7 +355,13 @@ const ScreenshotEditModal = ({
                         )}
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-[#1B1B1B] font-['Termina'] truncate">{episode.title}</div>
-                          <div className="text-sm text-gray-500 font-['Termina'] truncate">{episode.releaseDate}</div>
+                          <div className="text-sm text-gray-500 font-['Termina'] truncate">
+                            {episode.releaseDate ? new Date(episode.releaseDate).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            }) : ''}
+                          </div>
                         </div>
                       </button>
                     ))}
