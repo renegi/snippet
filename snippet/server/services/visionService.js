@@ -179,7 +179,7 @@ class VisionService {
       if (line.avgArea > 50000) {
         logger.info(`📱 Mobile Debug: Excluding very large text: "${line.text}" (area: ${line.avgArea})`);
         return false;
-      }
+        }
       
       logger.debug(`📱 Including line "${line.text}" - Y: ${line.avgY}, range: ${primaryStartY}-${primaryEndY}`);
       return true;
@@ -211,11 +211,11 @@ class VisionService {
         // Exclude very large text (likely system UI)
         if (line.avgArea > 5000) {
           return false;
-        }
-        
-        return true;
-      });
+      }
       
+      return true;
+    });
+    
       logger.info(`📱 Mobile Debug: Upper area (20%-50%) filtered to ${upperFiltered.length} lines`);
       
       // Combine primary and upper candidates
@@ -234,17 +234,17 @@ class VisionService {
     const fallbackFiltered = lines.filter(line => {
       // Must be in the fallback content area
       if (line.avgY < fallbackStartY || line.avgY > fallbackEndY) {
-        return false;
-      }
+          return false;
+        }
       
       // Exclude very large text (likely system UI)
       if (line.avgArea > 5000) {
         return false;
       }
       
-      return true;
-    });
-    
+        return true;
+      });
+      
     logger.info(`📱 Mobile Debug: Fallback area (10%-20%) filtered to ${fallbackFiltered.length} lines`);
     
     // If fallback found candidates, use them
@@ -762,8 +762,8 @@ class VisionService {
           );
           
           if (fuzzyResult.success) {
-            return {
-              podcastTitle: validation.validatedPodcast.title,
+                  return {
+            podcastTitle: validation.validatedPodcast.title,
               episodeTitle: fuzzyResult.episodeTitle,
               confidence: Math.min(validation.confidence, fuzzyResult.confidence),
               validation: {
@@ -808,9 +808,9 @@ class VisionService {
               }
             },
             player: 'validated'
-          };
-        }
-      } catch (error) {
+                  };
+                }
+              } catch (error) {
         logger.debug(`Episode search error for ${validation.validatedPodcast.title}:`, error.message);
       }
     }
@@ -859,7 +859,7 @@ class VisionService {
     // Fallback: No validation successful, return "Episode not found"
     logger.info('No validation successful, returning "Episode not found"');
     
-    return {
+            return {
       podcastTitle: 'Episode not found',
       episodeTitle: 'Episode not found',
       confidence: 0.0,
@@ -913,9 +913,9 @@ class VisionService {
           continue;
         }
         
-        pairs.push({
-          top: candidate1,
-          bottom: candidate2,
+          pairs.push({
+            top: candidate1,
+            bottom: candidate2,
           distance: verticalDistance,
           similarity: similarity,
           horizontalOverlap: overlapRatio
@@ -1037,8 +1037,8 @@ class VisionService {
     try {
       logger.info(`Validating spatial pair (${pairType}): podcast="${podcastCandidate.text}" episode="${episodeCandidate.text}"`);
       
-      // Step 1: Validate the podcast candidate
-      const podcastValidation = await applePodcastsService.validatePodcastInfo(podcastCandidate.text, null);
+      // Step 1: Validate the podcast candidate (pass episode title for fuzzy search)
+      const podcastValidation = await applePodcastsService.validatePodcastInfo(podcastCandidate.text, episodeCandidate.text);
       
       if (!podcastValidation.validated || 
           podcastValidation.validatedPodcast?.confidence < this.config.validationConfidenceThreshold) {
@@ -1047,6 +1047,37 @@ class VisionService {
       }
       
       logger.info(`Podcast validated: "${podcastValidation.validatedPodcast.title}" (confidence: ${podcastValidation.validatedPodcast.confidence})`);
+      
+      // Check if fuzzy podcast search already found an episode
+      if (podcastValidation.validatedEpisode) {
+        logger.info(`Fuzzy podcast search already found episode: "${podcastValidation.validatedEpisode.title}"`);
+        return {
+          success: true,
+          podcastTitle: podcastValidation.validatedPodcast.title,
+          episodeTitle: podcastValidation.validatedEpisode.title,
+          confidence: Math.min(podcastValidation.confidence, podcastValidation.validatedEpisode.confidence),
+          validation: {
+            validated: true,
+            method: `spatial_pair_${pairType}_fuzzy_podcast`,
+            podcastCandidate: podcastCandidate.text,
+            episodeCandidate: episodeCandidate.text,
+            fuzzyMatch: true,
+            validatedPodcast: {
+              id: podcastValidation.validatedPodcast.id,
+              title: podcastValidation.validatedPodcast.title,
+              artworkUrl: podcastValidation.validatedPodcast.artworkUrl,
+              confidence: podcastValidation.validatedPodcast.confidence
+            },
+            validatedEpisode: {
+              id: podcastValidation.validatedEpisode.id,
+              title: podcastValidation.validatedEpisode.title,
+              artworkUrl: podcastValidation.validatedEpisode.artworkUrl,
+              confidence: podcastValidation.validatedEpisode.confidence
+            }
+          },
+          player: 'validated'
+        };
+      }
       
       // Step 2: Try exact episode validation first
       try {
@@ -1171,7 +1202,7 @@ class VisionService {
         const totalMatches = exactMatches.length + (partialMatches.length * 0.5);
         const matchScore = totalMatches / keywords.length;
         
-        return {
+          return {
           episode,
           matchedKeywords: [...exactMatches, ...partialMatches.filter(k => !exactMatches.includes(k))],
           matchScore,
@@ -1347,7 +1378,7 @@ class VisionService {
     if (candidateTimestamps.length === 0) {
       logger.info(`📱 Mobile Debug: extractTimestamp - No candidates in filtered lines, trying fallback`);
       // Fallback: extract from full text but still filter clock times
-      const allTimes = [...fullText.matchAll(timeRegex)].map(m => m[0]);
+    const allTimes = [...fullText.matchAll(timeRegex)].map(m => m[0]);
       logger.info(`📱 Mobile Debug: extractTimestamp - All times in full text: ${allTimes.join(', ')}`);
       const fallbackResult = this.filterClockTimes(allTimes, fullText);
       logger.info(`📱 Mobile Debug: extractTimestamp - Fallback result: ${fallbackResult}`);
@@ -1367,9 +1398,9 @@ class VisionService {
       // Exclude negative timestamps (remaining time)
       if (fullText.includes('-' + candidate.time)) {
         logger.info(`📱 Mobile Debug: extractTimestamp - Excluded "${candidate.time}" due to negative timestamp`);
-        return false;
-      }
-      
+      return false;
+    }
+    
       // Check if this looks like a valid podcast timestamp (MM:SS format)
       const isPodcastTimestamp = /^\d{1,2}:\d{2}$/.test(candidate.time);
       const minutes = parseInt(candidate.time.split(':')[0]);
