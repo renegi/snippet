@@ -477,13 +477,34 @@ class ApplePodcastsService {
       logger.info(`Keywords breakdown: ${keywords.length} keywords from "${episodeTitle}"`);
       
       // Log all episodes with their scores for debugging
+      logger.info(`Raw episode count: ${allEpisodes.length}`);
+      logger.info(`First 5 episodes:`, allEpisodes.slice(0, 5).map(e => ({
+        hasEpisode: !!e,
+        hasTitle: !!(e && e.title),
+        hasTrackName: !!(e && e.trackName),
+        title: e?.title || 'NO_TITLE',
+        trackName: e?.trackName || 'NO_TRACK_NAME',
+        type: typeof e?.title
+      })));
+      
       const allEpisodeScores = allEpisodes.map(episode => {
-        if (!episode || !episode.title) return null;
+        // Handle both 'title' and 'trackName' properties from Apple Podcasts API
+        const episodeTitle = episode?.title || episode?.trackName;
         
-        const episodeTitle = episode.title.toLowerCase();
-        const exactMatches = keywords.filter(keyword => episodeTitle.includes(keyword));
+        if (!episode || !episodeTitle) {
+          logger.info(`Filtering out episode:`, { 
+            hasEpisode: !!episode, 
+            hasTitle: !!(episode && episode.title),
+            hasTrackName: !!(episode && episode.trackName),
+            episodeKeys: episode ? Object.keys(episode) : []
+          });
+          return null;
+        }
+        
+        const episodeTitleLower = episodeTitle.toLowerCase();
+        const exactMatches = keywords.filter(keyword => episodeTitleLower.includes(keyword));
         const partialMatches = keywords.filter(keyword => {
-          const words = episodeTitle.split(/\s+/);
+          const words = episodeTitleLower.split(/\s+/);
           return words.some(word => word.startsWith(keyword) || keyword.startsWith(word));
         });
         
@@ -491,7 +512,7 @@ class ApplePodcastsService {
         const matchScore = totalMatches / keywords.length;
         
         return {
-          title: episode.title,
+          title: episodeTitle,
           score: matchScore,
           exactMatches: exactMatches,
           partialMatches: partialMatches.filter(k => !exactMatches.includes(k))
@@ -505,19 +526,21 @@ class ApplePodcastsService {
       
       // Find episodes that match multiple keywords with improved fuzzy matching
       const matchingEpisodes = allEpisodes.map(episode => {
-        // Skip episodes without a title
-        if (!episode || !episode.title) {
+        // Handle both 'title' and 'trackName' properties from Apple Podcasts API
+        const episodeTitle = episode?.title || episode?.trackName;
+        
+        if (!episode || !episodeTitle) {
           return null;
         }
         
-        const episodeTitle = episode.title.toLowerCase();
+        const episodeTitleLower = episodeTitle.toLowerCase();
         
         // Check for exact keyword matches
-        const exactMatches = keywords.filter(keyword => episodeTitle.includes(keyword));
+        const exactMatches = keywords.filter(keyword => episodeTitleLower.includes(keyword));
         
         // Check for partial word matches (for truncated text)
         const partialMatches = keywords.filter(keyword => {
-          const words = episodeTitle.split(/\s+/);
+          const words = episodeTitleLower.split(/\s+/);
           return words.some(word => word.startsWith(keyword) || keyword.startsWith(word));
         });
         
@@ -531,7 +554,10 @@ class ApplePodcastsService {
         }
         
         return {
-          episode,
+          episode: {
+            ...episode,
+            title: episodeTitle // Ensure we use the correct title
+          },
           matchedKeywords: [...exactMatches, ...partialMatches.filter(k => !exactMatches.includes(k))],
           matchScore,
           exactMatches: exactMatches.length,
