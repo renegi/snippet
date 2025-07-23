@@ -83,6 +83,7 @@ class VisionService {
       // Extract structured information
       const candidates = this.extractTextCandidates(detections);
       const timestamp = this.extractTimestamp(detections);
+      logger.info(`📱 Mobile Debug: extractText - Timestamp extracted: ${timestamp}`);
       
       logger.info(`Found ${candidates.length} text candidates`);
       
@@ -1126,10 +1127,12 @@ class VisionService {
   }
 
   extractTimestamp(textAnnotations) {
-    if (!textAnnotations || textAnnotations.length === 0) return null;
-    
-    const fullText = textAnnotations[0].description;
-    const individualTexts = textAnnotations.slice(1);
+    try {
+      logger.info(`📱 Mobile Debug: extractTimestamp - FUNCTION CALLED with ${textAnnotations ? textAnnotations.length : 0} annotations`);
+      if (!textAnnotations || textAnnotations.length === 0) return null;
+      
+      const fullText = textAnnotations[0].description;
+      const individualTexts = textAnnotations.slice(1);
     
     logger.info(`📱 Mobile Debug: extractTimestamp - Full text length: ${fullText.length}`);
     logger.info(`📱 Mobile Debug: extractTimestamp - Individual texts count: ${individualTexts.length}`);
@@ -1218,6 +1221,11 @@ class VisionService {
     const result = podcastTimestamps.length > 0 ? podcastTimestamps[0].time : null;
     logger.info(`📱 Mobile Debug: extractTimestamp - Final result: ${result}`);
     return result;
+    } catch (error) {
+      logger.error(`📱 Mobile Debug: extractTimestamp - ERROR: ${error.message}`);
+      logger.error(`📱 Mobile Debug: extractTimestamp - Stack: ${error.stack}`);
+      return null;
+    }
   }
   
   filterClockTimes(times, fullText) {
