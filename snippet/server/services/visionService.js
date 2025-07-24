@@ -279,6 +279,12 @@ class VisionService {
     const lines = [];
     
     individualTexts.forEach(word => {
+      // Add null checks to prevent undefined errors
+      if (!word || !word.boundingPoly || !word.boundingPoly.vertices || !word.boundingPoly.vertices[0]) {
+        logger.warn(`Skipping word with invalid boundingPoly:`, word);
+        return;
+      }
+      
       const y = word.boundingPoly.vertices[0].y;
       const x = word.boundingPoly.vertices[0].x;
       let line = lines.find(l => Math.abs(l.avgY - y) < this.config.lineTolerance);
@@ -645,18 +651,29 @@ class VisionService {
         { description: candidates.map(c => c.text).join(' ') }, // Full text
         ...candidates.map(c => ({ 
           description: c.text,
-          boundingPoly: { vertices: c.words?.[0]?.boundingPoly?.vertices || [] }
+          boundingPoly: { 
+            vertices: c.words?.[0]?.boundingPoly?.vertices || [
+              { x: 0, y: c.avgY },
+              { x: 100, y: c.avgY },
+              { x: 100, y: c.avgY + 20 },
+              { x: 0, y: c.avgY + 20 }
+            ]
+          }
         }))
       ];
       
-      const extractedTimestamp = this.extractTimestamp(textAnnotations);
-      if (extractedTimestamp) {
-        // Find the Y position of the timestamp
-        const timestampCandidate = candidates.find(c => c.text.includes(extractedTimestamp));
-        if (timestampCandidate) {
-          timestampBoundaryY = timestampCandidate.avgY;
-          logger.info(`⏰ Using timestamp "${extractedTimestamp}" at Y: ${timestampBoundaryY} as boundary for spatial pairs`);
+      try {
+        const extractedTimestamp = this.extractTimestamp(textAnnotations);
+        if (extractedTimestamp) {
+          // Find the Y position of the timestamp
+          const timestampCandidate = candidates.find(c => c.text.includes(extractedTimestamp));
+          if (timestampCandidate) {
+            timestampBoundaryY = timestampCandidate.avgY;
+            logger.info(`⏰ Using timestamp "${extractedTimestamp}" at Y: ${timestampBoundaryY} as boundary for spatial pairs`);
+          }
         }
+      } catch (error) {
+        logger.warn(`⏰ Timestamp extraction failed, continuing without boundary filtering: ${error.message}`);
       }
     }
     

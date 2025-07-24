@@ -854,21 +854,32 @@ class ApplePodcastsService {
     let bestSimilarity = 0;
     
     for (const result of results) {
-      const similarity = this.calculateSimilarity(searchTerm, result.title);
+      // Handle both podcast results (collectionName) and episode results (trackName)
+      const title = result.collectionName || result.trackName || result.title || '';
       
-      logger.info(`  → "${result.title}" (similarity: ${similarity.toFixed(3)})`);
+      if (!title) {
+        logger.warn(`Skipping result with no title:`, result);
+        continue;
+      }
+      
+      const similarity = this.calculateSimilarity(searchTerm, title);
+      
+      logger.info(`  → "${title}" (similarity: ${similarity.toFixed(3)})`);
       
       if (similarity > bestSimilarity) {
         bestSimilarity = similarity;
         bestMatch = result;
-        logger.info(`  → New best match: "${result.title}" (similarity: ${similarity.toFixed(3)})`);
+        logger.info(`  → New best match: "${title}" (similarity: ${similarity.toFixed(3)})`);
       }
     }
     
     if (bestMatch) {
-      logger.info(`Final best match: "${bestMatch.title}" (similarity: ${bestSimilarity.toFixed(3)})`);
+      const title = bestMatch.collectionName || bestMatch.trackName || bestMatch.title || '';
+      logger.info(`Final best match: "${title}" (similarity: ${bestSimilarity.toFixed(3)})`);
       // Update the confidence score
       bestMatch.confidence = bestSimilarity;
+    } else {
+      logger.info(`No valid matches found for "${searchTerm}"`);
     }
     
     return bestMatch;
