@@ -150,16 +150,45 @@ class VisionService {
     ));
     
     // Use position-based filtering to focus on podcast content area
-    const filteredLines = this.filterByPosition(lines, imageDimensions);
+    let filteredLines = this.filterByPosition(lines, imageDimensions);
     
     // Filter and score candidates
-    const candidates = filteredLines
+    let candidates = filteredLines
       .filter(line => this.isValidCandidate(line))
       .map(line => this.scoreCandidate(line))
       .sort((a, b) => b.score - a.score)
       .slice(0, this.config.maxCandidatesForValidation);
     
     logger.info('Text candidates:', candidates.map(c => `"${c.text}" (score: ${c.score.toFixed(2)})`));
+    
+    // If we have fewer than 1 candidate, try upper fallback to get more candidates
+    if (candidates.length < 1 && imageDimensions && imageDimensions.height) {
+      logger.info('🎧 No candidates found in primary area, trying upper fallback to get more candidates...');
+      
+      const upperFallbackLines = this.filterByPositionUpperFallback(lines, imageDimensions);
+      const upperFallbackCandidates = upperFallbackLines
+        .filter(line => this.isValidCandidate(line))
+        .map(line => this.scoreCandidate(line))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, this.config.maxCandidatesForValidation);
+      
+      logger.info('Upper fallback candidates:', upperFallbackCandidates.map(c => `"${c.text}" (score: ${c.score.toFixed(2)})`));
+      
+      // Combine candidates, avoiding duplicates
+      const combinedCandidates = [...candidates];
+      for (const upperCandidate of upperFallbackCandidates) {
+        if (!combinedCandidates.some(c => c.text === upperCandidate.text)) {
+          combinedCandidates.push(upperCandidate);
+        }
+      }
+      
+      // Sort by score and limit
+      candidates = combinedCandidates
+        .sort((a, b) => b.score - a.score)
+        .slice(0, this.config.maxCandidatesForValidation);
+      
+      logger.info('Combined candidates:', candidates.map(c => `"${c.text}" (score: ${c.score.toFixed(2)})`));
+    }
     
     return candidates;
   }
@@ -292,6 +321,43 @@ class VisionService {
     
     logger.info(`Mobile Debug: Full fallback filtered to ${fullFallbackFiltered.length} lines`);
     return fullFallbackFiltered;
+  }
+
+  filterByPositionUpperFallback(lines, imageDimensions) {
+    const { height: imageHeight, width: imageWidth } = imageDimensions;
+    
+    logger.info(`🎧 Mobile Debug: Using upper fallback filtering (${imageWidth}x${imageHeight})`);
+    
+    // UPPER FALLBACK STRATEGY: Search in 8%-20% area (upper content area)
+    const upperFallbackStartY = imageHeight * 0.08;  // 8% from top of image
+    const upperFallbackEndY = imageHeight * 0.20;    // 20% from top of image
+    
+    logger.info(`🎧 Mobile Debug: Upper fallback range: ${upperFallbackStartY}-${upperFallbackEndY} (8%-20% of image height)`);
+    
+    const upperFallbackFiltered = lines.filter(line => {
+      // Must be in the upper fallback content area
+      if (line.avgY < upperFallbackStartY || line.avgY > upperFallbackEndY) {
+        logger.info(`🎧 Mobile Debug: Excluding "${line.text}" - Y: ${line.avgY}, range: ${upperFallbackStartY}-${upperFallbackEndY}`);
+        return false;
+      }
+      
+      // Exclude very large text (likely system UI)
+      if (line.avgArea > 5000) {
+        logger.info(`🎧 Mobile Debug: Excluding very large text: "${line.text}" (area: ${line.avgArea})`);
+        return false;
+      }
+      
+      return true;
+    });
+    
+    logger.info(`🎧 Mobile Debug: Upper fallback area (8%-20%) filtered to ${upperFallbackFiltered.length} lines`);
+    if (upperFallbackFiltered.length > 0) {
+      logger.info(`🎧 Mobile Debug: Included lines:`, upperFallbackFiltered.map(line => 
+        `"${line.text}" (Y: ${line.avgY})`
+      ));
+    }
+    
+    return upperFallbackFiltered;
   }
 
   filterByPositionContentRelative(lines) {
@@ -801,7 +867,13 @@ class VisionService {
     logger.info('🎧 Starting spatial pair validation process...');
     
     // Strategy 1: Find spatially close pairs and validate them
-    const spatialPairs = this.findSpatialPairs(candidates);
+    let spatialPairs = this.findSpatialPairs(candidates);
+    logger.info(`🎧 Found ${spatialPairs.length} spatial pairs:`, spatialPairs.map(p => `"${p.top.text}" + "${p.bottom.text}"`));
+    
+    // If no spatial pairs found, log it (upper fallback is now handled in extractTextCandidates)
+    if (spatialPairs.length === 0) {
+      logger.info('🎧 No spatial pairs found from current candidates');
+    }
     
     // First pass: Collect all validated podcasts from spatial pairs
     const validatedPodcasts = [];
