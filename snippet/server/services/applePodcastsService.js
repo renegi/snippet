@@ -176,42 +176,42 @@ class ApplePodcastsService {
 
   async searchMultiplePodcasts(searchTerm) {
     try {
-      const encodedTerm = encodeURIComponent(searchTerm);
-      const url = `${this.baseUrl}/search?term=${encodedTerm}&entity=podcast&limit=10`;
-
       logger.info(`Searching multiple podcasts for term: "${searchTerm}"`);
-
-      const response = await fetch(url);
+      
+      const response = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(searchTerm)}&entity=podcast&limit=50`);
+      
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        logger.error(`Apple Podcasts API error: ${response.status} ${response.statusText}`);
+        return { podcasts: [] };
       }
-
+      
       const data = await response.json();
       const results = data.results || [];
-
+      
       logger.info(`Apple Podcasts search returned ${results.length} results for "${searchTerm}"`);
-
-      // Return all results as podcast objects
+      
+      // Log all results for debugging
+      if (results.length > 0) {
+        logger.info(`All search results for "${searchTerm}":`);
+        results.forEach((result, index) => {
+          logger.info(`  ${index + 1}. "${result.collectionName}" (artist: "${result.artistName}")`);
+        });
+      }
+      
       const podcasts = results.map(result => ({
         id: result.collectionId,
         title: result.collectionName,
-        artistName: result.artistName,
+        artist: result.artistName,
         feedUrl: result.feedUrl,
-        artworkUrl: result.artworkUrl100 || result.artworkUrl600,
-        confidence: this.calculateSimilarity(searchTerm, result.collectionName)
+        artworkUrl: result.artworkUrl100,
+        confidence: 0 // Will be calculated by findBestMatch
       }));
       
-      // Log the top candidates for debugging
-      const topCandidates = podcasts.slice(0, 3);
-      logger.info(`Top podcast candidates for "${searchTerm}":`, topCandidates.map(p => 
-        `"${p.title}" (confidence: ${p.confidence.toFixed(3)})`
-      ));
-
       return { podcasts };
-
+      
     } catch (error) {
-      logger.error('Error searching multiple podcasts:', error);
-      return { podcasts: [], error: error.message };
+      logger.error(`Error searching multiple podcasts for "${searchTerm}":`, error);
+      return { podcasts: [] };
     }
   }
 
@@ -408,9 +408,14 @@ class ApplePodcastsService {
     cleaned = cleaned.replace(/[^\w\s]/g, ' ');
     
     // Remove partial words (words that end with common truncation patterns)
+    // AND remove single letters (like "E" in "E Another Podcast")
     const words = cleaned.split(/\s+/).filter(word => {
-      // Keep words that are complete or don't end with common truncation patterns
-      return word.length > 0 && !word.endsWith('w') && !word.endsWith('...') && !word.endsWith('…');
+      // Keep words that are complete, don't end with common truncation patterns, and are not single letters
+      return word.length > 0 && 
+             !word.endsWith('w') && 
+             !word.endsWith('...') && 
+             !word.endsWith('…') &&
+             word.length > 1; // Remove single letters
     });
     
     // Join back together
@@ -419,6 +424,23 @@ class ApplePodcastsService {
     logger.info(`Cleaned podcast text: "${text}" → "${cleaned}"`);
     
     return cleaned;
+  }
+
+  isCommonWord(word) {
+    const stopWords = [
+      'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
+      'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did',
+      'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those',
+      'not', 'no', 'yes', 'so', 'as', 'if', 'then', 'else', 'when', 'where', 'why', 'how',
+      'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own',
+      'same', 'than', 'too', 'very', 'just', 'now', 'here', 'there', 'up', 'down', 'out', 'off',
+      'over', 'under', 'again', 'further', 'then', 'once', 'about', 'against', 'between', 'into',
+      'through', 'during', 'before', 'after', 'above', 'below', 'from', 'since', 'until', 'without',
+      'under', 'within', 'among', 'toward', 'towards', 'upon', 'across', 'behind', 'beneath',
+      'beside', 'beyond', 'inside', 'outside', 'throughout', 'beyond', 'despite', 'except',
+      'including', 'like', 'near', 'past', 'since', 'unlike', 'via', 'per', 'versus', 'vs'
+    ];
+    return stopWords.includes(word.toLowerCase());
   }
 
   async fuzzySearchEpisodeInPodcast(podcast, episodeTitle) {
@@ -647,14 +669,17 @@ class ApplePodcastsService {
     let cleaned = text.toLowerCase().trim();
     cleaned = cleaned.replace(/[^\w\s]/g, ' ');
     
-    // Split into words and filter out common stop words
-    const stopWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those'];
+    // Extract meaningful keywords (words with 3+ characters)
+    const words = cleaned.split(/\s+/)
+      .filter(word => word.length >= 3)
+      .filter(word => !this.isCommonWord(word));
     
-    const words = cleaned.split(/\s+/).filter(word => {
-      return word.length > 2 && !stopWords.includes(word);
-    });
+    // Remove duplicates while preserving order
+    const uniqueWords = [...new Set(words)];
     
-    return words;
+    logger.info(`🎧 Keywords extracted from "${text}": [${uniqueWords.join(', ')}]`);
+    
+    return uniqueWords;
   }
 
   async searchEpisode(episodeTitle, podcastId) {
@@ -818,37 +843,34 @@ class ApplePodcastsService {
   }
 
   findBestMatch(searchTerm, results) {
+    if (!results || results.length === 0) {
+      logger.info(`No results to find best match for "${searchTerm}"`);
+      return null;
+    }
+    
+    logger.info(`Finding best match for "${searchTerm}" among ${results.length} results`);
+    
     let bestMatch = null;
     let bestSimilarity = 0;
-
-    logger.info(`Finding best match for "${searchTerm}" among ${results.length} results`);
-
+    
     for (const result of results) {
-      const title = result.collectionName || result.trackName || '';
-      const similarity = this.calculateSimilarity(searchTerm, title);
+      const similarity = this.calculateSimilarity(searchTerm, result.title);
+      
+      logger.info(`  → "${result.title}" (similarity: ${similarity.toFixed(3)})`);
       
       if (similarity > bestSimilarity) {
         bestSimilarity = similarity;
-        bestMatch = { result, similarity };
-        // Only log when we find a new best match, and only if similarity is significant
-        if (similarity > 0.1) {
-          logger.info(`  → New best match: "${title}" (similarity: ${similarity.toFixed(3)})`);
-        }
+        bestMatch = result;
+        logger.info(`  → New best match: "${result.title}" (similarity: ${similarity.toFixed(3)})`);
       }
     }
-
-    // FIXED: Always return the best match, even if similarity is 0
-    if (results.length > 0 && !bestMatch) {
-      // If no match was found but we have results, use the first one with 0 similarity
-      const firstResult = results[0];
-      const title = firstResult.collectionName || firstResult.trackName || '';
-      bestMatch = { result: firstResult, similarity: 0 };
-      logger.info(`  → Using first result as fallback: "${title}" (similarity: 0.000)`);
+    
+    if (bestMatch) {
+      logger.info(`Final best match: "${bestMatch.title}" (similarity: ${bestSimilarity.toFixed(3)})`);
+      // Update the confidence score
+      bestMatch.confidence = bestSimilarity;
     }
-
-    if (bestMatch && bestMatch.similarity > 0.1) {
-      logger.info(`Final best match: "${bestMatch.result.collectionName || bestMatch.result.trackName}" (similarity: ${bestMatch.similarity.toFixed(3)})`);
-    }
+    
     return bestMatch;
   }
 

@@ -413,7 +413,7 @@ class VisionService {
     // 8. Ellipsis filter - Reject candidates with 4+ periods in a row (UI loading indicators)
     if (/\.{4,}/.test(text)) {
               logger.info(`Mobile Debug: Rejecting "${originalText}" - contains 4+ periods in a row (UI loading indicator)`);
-      return false;
+        return false;
     }
     
     // 9. System text structure filter - REMOVED to allow episode titles with numbers and colons
@@ -440,7 +440,7 @@ class VisionService {
     if (/\d+[\/\-\.]\d+([\/\-\.]\d+)?/.test(text)) {
       // Exclude version numbers like "2.0", "1.5", etc.
       if (!/\d+\.\d+/.test(text) || text.length < 10) {
-        return true;
+      return true;
       }
     }
     
@@ -448,7 +448,7 @@ class VisionService {
     if (/\d{1,2}\s+\w+/.test(text) && text.length < 25) {
       // Exclude patterns like "2.0" where the space might be interpreted as \s+
       if (!/\d+\.\d+/.test(text)) {
-        return true;
+      return true;
       }
     }
     
@@ -637,8 +637,48 @@ class VisionService {
   async validateCandidates(candidates) {
     logger.info('🎧 Starting spatial pair validation process...');
     
+    // NEW: Extract timestamp first to use as boundary for filtering pairs
+    let timestampBoundaryY = null;
+    if (candidates.length > 0) {
+      // Create textAnnotations-like structure for timestamp extraction
+      const textAnnotations = [
+        { description: candidates.map(c => c.text).join(' ') }, // Full text
+        ...candidates.map(c => ({ 
+          description: c.text,
+          boundingPoly: { vertices: c.words?.[0]?.boundingPoly?.vertices || [] }
+        }))
+      ];
+      
+      const extractedTimestamp = this.extractTimestamp(textAnnotations);
+      if (extractedTimestamp) {
+        // Find the Y position of the timestamp
+        const timestampCandidate = candidates.find(c => c.text.includes(extractedTimestamp));
+        if (timestampCandidate) {
+          timestampBoundaryY = timestampCandidate.avgY;
+          logger.info(`⏰ Using timestamp "${extractedTimestamp}" at Y: ${timestampBoundaryY} as boundary for spatial pairs`);
+        }
+      }
+    }
+    
     // Strategy 1: Find spatially close pairs and validate them
-    const spatialPairs = this.findSpatialPairs(candidates);
+    let spatialPairs = this.findSpatialPairs(candidates);
+    
+    // NEW: Filter out pairs below the timestamp boundary
+    if (timestampBoundaryY) {
+      const originalCount = spatialPairs.length;
+      spatialPairs = spatialPairs.filter(pair => {
+        const pairAvgY = (pair.top.avgY + pair.bottom.avgY) / 2;
+        const isAboveBoundary = pairAvgY <= timestampBoundaryY;
+        
+        if (!isAboveBoundary) {
+          logger.info(`🎧 Excluding pair below timestamp boundary: "${pair.top.text}" + "${pair.bottom.text}" (avgY: ${pairAvgY.toFixed(0)} > ${timestampBoundaryY})`);
+        }
+        
+        return isAboveBoundary;
+      });
+      
+      logger.info(`🎧 Filtered spatial pairs: ${originalCount} → ${spatialPairs.length} (excluded ${originalCount - spatialPairs.length} pairs below timestamp boundary)`);
+    }
     
     // First pass: Collect all validated podcasts from spatial pairs
     const validatedPodcasts = [];
@@ -1501,8 +1541,8 @@ class VisionService {
               // Exclude negative timestamps (remaining time)
         if (fullText.includes('-' + candidate.time)) {
           logger.info(`⏰ Mobile Debug: extractTimestamp - Excluded "${candidate.time}" due to negative timestamp`);
-        return false;
-      }
+      return false;
+    }
     
       // Check if this looks like a valid podcast timestamp (MM:SS format)
       const isPodcastTimestamp = /^\d{1,2}:\d{2}$/.test(candidate.time);
@@ -1523,11 +1563,11 @@ class VisionService {
         
         if (hasClockContext) {
           logger.info(`⏰ Mobile Debug: extractTimestamp - Excluded "${candidate.time}" due to clock context`);
-          return false;
-        }
-        
+        return false;
+      }
+      
         logger.info(`⏰ Mobile Debug: extractTimestamp - Accepted "${candidate.time}" as valid timestamp`);
-        return true;
+      return true;
     });
     
     logger.info(`⏰ Mobile Debug: extractTimestamp - Final podcast timestamps: ${podcastTimestamps.length}`);
@@ -1562,10 +1602,10 @@ class VisionService {
       
       const context = this.getTimestampContext(fullText, time);
       const hasClockContext = this.hasClockContext(context);
-              logger.info(`Mobile Debug: filterClockTimes - Context for "${time}": "${context}" (hasClockContext: ${hasClockContext})`);
+      logger.info(`Mobile Debug: filterClockTimes - Context for "${time}": "${context}" (hasClockContext: ${hasClockContext})`);
       
       if (hasClockContext) {
-                  logger.info(`Mobile Debug: filterClockTimes - Excluded "${time}" due to clock context`);
+        logger.info(`⏰ Mobile Debug: filterClockTimes - Excluded "${time}" due to clock context`);
         return false;
       }
       
@@ -1618,4 +1658,4 @@ class VisionService {
   }
 }
 
-module.exports = new VisionService(); 
+module.exports = new VisionService();
