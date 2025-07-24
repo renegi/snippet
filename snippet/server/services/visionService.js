@@ -281,7 +281,25 @@ class VisionService {
     individualTexts.forEach(word => {
       const y = word.boundingPoly.vertices[0].y;
       const x = word.boundingPoly.vertices[0].x;
-      let line = lines.find(l => Math.abs(l.avgY - y) < this.config.lineTolerance);
+      
+      // Calculate word height for height-based filtering
+      const vertices = word.boundingPoly.vertices;
+      const wordHeight = Math.abs(vertices[2].y - vertices[0].y);
+      
+      // Find existing line with similar Y position AND similar height
+      let line = lines.find(l => {
+        const yMatch = Math.abs(l.avgY - y) < this.config.lineTolerance;
+        if (!yMatch) return false;
+        
+        // Check if heights are compatible (within 70% of each other)
+        const lineAvgHeight = l.words.reduce((sum, w) => {
+          const v = w.boundingPoly.vertices;
+          return sum + Math.abs(v[2].y - v[0].y);
+        }, 0) / l.words.length;
+        
+        const heightRatio = Math.min(wordHeight, lineAvgHeight) / Math.max(wordHeight, lineAvgHeight);
+        return heightRatio >= 0.7; // 70% height similarity threshold
+      });
       
       if (!line) {
         line = { avgY: y, words: [] };
