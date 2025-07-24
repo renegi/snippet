@@ -376,26 +376,31 @@ class VisionService {
     
     // 1. Time patterns (any language)
     if (this.isTimePattern(text)) {
+        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - time pattern`);
         return false;
       }
       
     // 2. Date patterns (any language)
     if (this.isDatePattern(text)) {
+        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - date pattern`);
         return false;
       }
       
     // 3. Percentage patterns
     if (/\b\d+%/.test(text)) {
+        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - percentage pattern`);
         return false;
       }
       
     // 4. Pure numbers or symbols
     if (/^[\d\s\-:]+$/.test(text) || /^[^\w\s]+$/.test(text)) {
+        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - pure numbers/symbols`);
         return false;
       }
       
     // 5. Single character or very short words
     if (/^.{1,2}$/.test(text.replace(/\s/g, ''))) {
+        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - single character or very short words`);
         return false;
       }
       
@@ -416,12 +421,14 @@ class VisionService {
     if (/\.{3,}|…/.test(text)) {
       // Allow if it's substantial content
       if (text.length < 15) {
+        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - contains ellipsis and too short (length: ${text.length})`);
         return false;
       }
     }
     
     // 9. Structural indicators of system text
     if (this.hasSystemTextStructure(text, line)) {
+      logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - system text structure`);
       return false;
     }
     
