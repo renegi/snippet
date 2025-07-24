@@ -49,7 +49,7 @@ class VisionService {
       minCandidateLength: 6,
       maxCandidateLength: 80,
       minWordCount: 2,
-      lineTolerance: 10,
+      lineTolerance: 18,
       validationConfidenceThreshold: 0.7,
       fallbackConfidenceThreshold: 0.6,
       maxCandidatesForValidation: 8
