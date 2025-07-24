@@ -283,7 +283,7 @@ const MainContent = ({
             return (
               <div 
                 key={index} 
-                className="self-stretch flex flex-row items-center justify-start gap-2 cursor-pointer hover:bg-[#E4E0D2] active:bg-[#E4E0D2] rounded-lg p-2 transition-colors"
+                className="self-stretch flex flex-row items-center justify-start gap-2 cursor-pointer rounded-lg transition-colors"
                 onClick={() => {
                   console.log('Screenshot clicked:', index, 'Handler exists:', !!onScreenshotClick);
                   onScreenshotClick && onScreenshotClick(index);
