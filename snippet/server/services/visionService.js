@@ -211,8 +211,8 @@ class VisionService {
     
     logger.info(`Mobile Debug: Using image-relative filtering (${imageWidth}x${imageHeight})`);
     
-    // PRIMARY STRATEGY: Focus on the podcast content area (50%-87.5% of image height)
-    const primaryStartY = imageHeight * 0.50;  // 50% from top of image
+    // PRIMARY STRATEGY: Focus on the podcast content area (45%-87.5% of image height)
+    const primaryStartY = imageHeight * 0.45;  // 45% from top of image
     const primaryEndY = imageHeight * 0.875;   // 87.5% from top of image
     
     logger.info(`Mobile Debug: Primary range: ${primaryStartY}-${primaryEndY} (50%-87.5% of image height)`);
@@ -391,7 +391,7 @@ class VisionService {
       if (line.avgArea > 50000) {
         logger.info(`Mobile Debug: Excluding very large text: "${line.text}" (area: ${line.avgArea})`);
         return false;
-      }
+        }
       
       return true;
     });
@@ -422,11 +422,11 @@ class VisionService {
         // Exclude very large text (likely system UI)
         if (line.avgArea > 5000) {
           return false;
-        }
-        
-        return true;
-      });
+      }
       
+      return true;
+    });
+    
       logger.info(`Mobile Debug: Upper area (20%-50%) filtered to ${upperFiltered.length} lines`);
       
       // Combine primary and upper candidates
@@ -445,17 +445,17 @@ class VisionService {
     const fallbackFiltered = lines.filter(line => {
       // Must be in the fallback content area
       if (line.avgY < fallbackStartY || line.avgY > fallbackEndY) {
-        return false;
-      }
+          return false;
+        }
       
       // Exclude very large text (likely system UI)
       if (line.avgArea > 5000) {
         return false;
       }
       
-      return true;
-    });
-    
+        return true;
+      });
+      
     logger.info(`Mobile Debug: Fallback area (10%-20%) filtered to ${fallbackFiltered.length} lines`);
     
     // If fallback found candidates, use them
