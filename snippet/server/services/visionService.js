@@ -279,12 +279,6 @@ class VisionService {
     const lines = [];
     
     individualTexts.forEach(word => {
-      // Add null checks to prevent undefined errors
-      if (!word || !word.boundingPoly || !word.boundingPoly.vertices || !word.boundingPoly.vertices[0]) {
-        logger.warn(`Skipping word with invalid boundingPoly:`, word);
-        return;
-      }
-      
       const y = word.boundingPoly.vertices[0].y;
       const x = word.boundingPoly.vertices[0].x;
       let line = lines.find(l => Math.abs(l.avgY - y) < this.config.lineTolerance);
@@ -643,59 +637,8 @@ class VisionService {
   async validateCandidates(candidates) {
     logger.info('🎧 Starting spatial pair validation process...');
     
-    // NEW: Extract timestamp first to use as boundary for filtering pairs
-    let timestampBoundaryY = null;
-    if (candidates.length > 0) {
-      // Create textAnnotations-like structure for timestamp extraction
-      const textAnnotations = [
-        { description: candidates.map(c => c.text).join(' ') }, // Full text
-        ...candidates.map(c => ({ 
-          description: c.text,
-          boundingPoly: { 
-            vertices: c.words?.[0]?.boundingPoly?.vertices || [
-              { x: 0, y: c.avgY },
-              { x: 100, y: c.avgY },
-              { x: 100, y: c.avgY + 20 },
-              { x: 0, y: c.avgY + 20 }
-            ]
-          }
-        }))
-      ];
-      
-      try {
-        const extractedTimestamp = this.extractTimestamp(textAnnotations);
-        if (extractedTimestamp) {
-          // Find the Y position of the timestamp
-          const timestampCandidate = candidates.find(c => c.text.includes(extractedTimestamp));
-          if (timestampCandidate) {
-            timestampBoundaryY = timestampCandidate.avgY;
-            logger.info(`⏰ Using timestamp "${extractedTimestamp}" at Y: ${timestampBoundaryY} as boundary for spatial pairs`);
-          }
-        }
-      } catch (error) {
-        logger.warn(`⏰ Timestamp extraction failed, continuing without boundary filtering: ${error.message}`);
-      }
-    }
-    
     // Strategy 1: Find spatially close pairs and validate them
-    let spatialPairs = this.findSpatialPairs(candidates);
-    
-    // NEW: Filter out pairs below the timestamp boundary
-    if (timestampBoundaryY) {
-      const originalCount = spatialPairs.length;
-      spatialPairs = spatialPairs.filter(pair => {
-        const pairAvgY = (pair.top.avgY + pair.bottom.avgY) / 2;
-        const isAboveBoundary = pairAvgY <= timestampBoundaryY;
-        
-        if (!isAboveBoundary) {
-          logger.info(`🎧 Excluding pair below timestamp boundary: "${pair.top.text}" + "${pair.bottom.text}" (avgY: ${pairAvgY.toFixed(0)} > ${timestampBoundaryY})`);
-        }
-        
-        return isAboveBoundary;
-      });
-      
-      logger.info(`🎧 Filtered spatial pairs: ${originalCount} → ${spatialPairs.length} (excluded ${originalCount - spatialPairs.length} pairs below timestamp boundary)`);
-    }
+    const spatialPairs = this.findSpatialPairs(candidates);
     
     // First pass: Collect all validated podcasts from spatial pairs
     const validatedPodcasts = [];
@@ -1619,10 +1562,10 @@ class VisionService {
       
       const context = this.getTimestampContext(fullText, time);
       const hasClockContext = this.hasClockContext(context);
-      logger.info(`Mobile Debug: filterClockTimes - Context for "${time}": "${context}" (hasClockContext: ${hasClockContext})`);
+              logger.info(`Mobile Debug: filterClockTimes - Context for "${time}": "${context}" (hasClockContext: ${hasClockContext})`);
       
       if (hasClockContext) {
-        logger.info(`⏰ Mobile Debug: filterClockTimes - Excluded "${time}" due to clock context`);
+                  logger.info(`Mobile Debug: filterClockTimes - Excluded "${time}" due to clock context`);
         return false;
       }
       
@@ -1675,4 +1618,4 @@ class VisionService {
   }
 }
 
-module.exports = new VisionService();
+module.exports = new VisionService(); 
