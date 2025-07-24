@@ -1,4 +1,5 @@
 const vision = require('@google-cloud/vision');
+const sharp = require('sharp');
 const logger = require('../utils/logger');
 const applePodcastsService = require('./applePodcastsService');
 
@@ -55,12 +56,29 @@ class VisionService {
     };
   }
 
+  async getImageDimensions(imagePath) {
+    try {
+      const metadata = await sharp(imagePath).metadata();
+      return {
+        width: metadata.width,
+        height: metadata.height
+      };
+    } catch (error) {
+      logger.warn('Mobile Debug: Could not extract image dimensions, falling back to content-based calculations:', error.message);
+      return null;
+    }
+  }
+
   async extractText(imagePath) {
     try {
       logger.info('Mobile Debug: Starting Vision API text detection', {
         imagePath,
         fileExists: require('fs').existsSync(imagePath)
       });
+      
+      // Extract image dimensions for image-relative filtering
+      const imageDimensions = await this.getImageDimensions(imagePath);
+      logger.info('Mobile Debug: Image dimensions:', imageDimensions);
       
       // Add timeout for large mobile images
       const timeout = new Promise((_, reject) =>
@@ -80,9 +98,9 @@ class VisionService {
       const fullText = detections[0].description;
       logger.info('OCR Full Text:', fullText);
       
-      // Extract structured information
-      const candidates = this.extractTextCandidates(detections);
-      const timestamp = this.extractTimestamp(detections);
+      // Extract structured information with image dimensions
+      const candidates = this.extractTextCandidates(detections, imageDimensions);
+      const timestamp = this.extractTimestamp(detections, imageDimensions);
       logger.info(`⏰ Mobile Debug: extractText - Timestamp extracted: ${timestamp}`);
       
       logger.info(`Found ${candidates.length} text candidates`);
@@ -121,7 +139,7 @@ class VisionService {
     }
   }
 
-  extractTextCandidates(textAnnotations) {
+  extractTextCandidates(textAnnotations, imageDimensions) {
     const individualTexts = textAnnotations.slice(1);
     
     // Group words into lines
@@ -132,7 +150,7 @@ class VisionService {
     ));
     
     // Use position-based filtering to focus on podcast content area
-    const filteredLines = this.filterByPosition(lines);
+    const filteredLines = this.filterByPosition(lines, imageDimensions);
     
     // Filter and score candidates
     const candidates = filteredLines
@@ -146,12 +164,140 @@ class VisionService {
     return candidates;
   }
 
-  filterByPosition(lines) {
+  filterByPosition(lines, imageDimensions) {
     if (lines.length === 0) return lines;
     
     logger.info(`Mobile Debug: Position filtering ${lines.length} input lines`);
     
-    // Calculate image dimensions
+    // Use image-relative calculations if dimensions available, otherwise fall back to content-relative
+    if (imageDimensions && imageDimensions.height) {
+      return this.filterByPositionImageRelative(lines, imageDimensions);
+    } else {
+      return this.filterByPositionContentRelative(lines);
+    }
+  }
+
+  filterByPositionImageRelative(lines, imageDimensions) {
+    const { height: imageHeight, width: imageWidth } = imageDimensions;
+    
+    logger.info(`Mobile Debug: Using image-relative filtering (${imageWidth}x${imageHeight})`);
+    
+    // PRIMARY STRATEGY: Focus on the podcast content area (50%-87.5% of image height)
+    const primaryStartY = imageHeight * 0.50;  // 50% from top of image
+    const primaryEndY = imageHeight * 0.875;   // 87.5% from top of image
+    
+    logger.info(`Mobile Debug: Primary range: ${primaryStartY}-${primaryEndY} (50%-87.5% of image height)`);
+    
+    const primaryFiltered = lines.filter(line => {
+      // Must be in the primary content area
+      if (line.avgY < primaryStartY || line.avgY > primaryEndY) {
+        logger.info(`Mobile Debug: Excluding "${line.text}" - Y: ${line.avgY}, range: ${primaryStartY}-${primaryEndY}`);
+        return false;
+      }
+      
+      // Exclude very large text (likely system UI or clock displays)
+      if (line.avgArea > 50000) {
+        logger.info(`Mobile Debug: Excluding very large text: "${line.text}" (area: ${line.avgArea})`);
+        return false;
+      }
+      
+      return true;
+    });
+    
+    logger.info(`Mobile Debug: Primary area (50%-87.5%) filtered to ${primaryFiltered.length} lines`);
+    if (primaryFiltered.length > 0) {
+      logger.info(`Mobile Debug: Included lines:`, primaryFiltered.map(line => 
+        `"${line.text}" (Y: ${line.avgY})`
+      ));
+    }
+    
+    // If primary strategy found good candidates, use them
+    if (primaryFiltered.length >= 2) {
+      return primaryFiltered;
+    }
+    
+    // If primary area has some candidates but not enough, try upper fallback
+    if (primaryFiltered.length === 1) {
+      logger.info('Mobile Debug: Primary area has 1 candidate, trying upper fallback');
+      const upperFallbackStartY = imageHeight * 0.08;  // 8% from top of image
+      const upperFallbackEndY = imageHeight * 0.20;    // 20% from top of image
+      
+      const upperFallbackFiltered = lines.filter(line => {
+        if (line.avgY < upperFallbackStartY || line.avgY > upperFallbackEndY) {
+          return false;
+        }
+        
+        // Exclude very large text (likely system UI)
+        if (line.avgArea > 5000) {
+          return false;
+        }
+        
+        return true;
+      });
+      
+      logger.info(`Mobile Debug: Upper fallback area (8%-20%) filtered to ${upperFallbackFiltered.length} lines`);
+      
+      // Combine primary and upper fallback candidates
+      const combinedCandidates = [...primaryFiltered, ...upperFallbackFiltered];
+      if (combinedCandidates.length >= 2) {
+        logger.info(`Mobile Debug: Combined candidates: ${combinedCandidates.length} total`);
+        return combinedCandidates;
+      }
+    }
+    
+    // UPPER FALLBACK STRATEGY: Search in 8%-20% area (upper content area)
+    logger.info('Mobile Debug: Primary area insufficient, trying upper fallback area (8%-20%)');
+    const upperFallbackStartY = imageHeight * 0.08;  // 8% from top of image
+    const upperFallbackEndY = imageHeight * 0.20;    // 20% from top of image
+    
+    const upperFallbackFiltered = lines.filter(line => {
+      // Must be in the upper fallback content area
+      if (line.avgY < upperFallbackStartY || line.avgY > upperFallbackEndY) {
+        return false;
+      }
+      
+      // Exclude very large text (likely system UI)
+      if (line.avgArea > 5000) {
+        return false;
+      }
+      
+      return true;
+    });
+    
+    logger.info(`Mobile Debug: Upper fallback area (8%-20%) filtered to ${upperFallbackFiltered.length} lines`);
+    
+    // If upper fallback found candidates, use them
+    if (upperFallbackFiltered.length >= 2) {
+      return upperFallbackFiltered;
+    }
+    
+    // FULL FALLBACK: Very lenient filtering using 5%-100% of image height
+    logger.info('Mobile Debug: Both areas insufficient, using full fallback (5%-100%)');
+    const fullFallbackStartY = imageHeight * 0.05;  // 5% from top of image
+    const fullFallbackEndY = imageHeight * 1.00;    // 100% from top of image (bottom of image)
+    
+    const fullFallbackFiltered = lines.filter(line => {
+      // Basic position filtering
+      if (line.avgY < fullFallbackStartY || line.avgY > fullFallbackEndY) {
+        return false;
+      }
+      
+      // Exclude very large text (likely system UI)
+      if (line.avgArea > 10000) {
+        return false;
+      }
+      
+      return true;
+    });
+    
+    logger.info(`Mobile Debug: Full fallback filtered to ${fullFallbackFiltered.length} lines`);
+    return fullFallbackFiltered;
+  }
+
+  filterByPositionContentRelative(lines) {
+    logger.info('Mobile Debug: Using content-relative filtering (fallback)');
+    
+    // Calculate image dimensions from content
     const maxY = Math.max(...lines.map(line => line.avgY));
     const minY = Math.min(...lines.map(line => line.avgY));
     const imageHeight = maxY - minY;
@@ -159,10 +305,10 @@ class VisionService {
       line.words ? Math.max(...line.words.map(w => w.boundingPoly.vertices[1].x)) : 0
     ));
     
-    logger.info(`Mobile Debug: Image dimensions: ${imageWidth}x${imageHeight}`);
+    logger.info(`Mobile Debug: Content-based dimensions: ${imageWidth}x${imageHeight}`);
     logger.info(`Mobile Debug: minY: ${minY}, maxY: ${maxY}, imageHeight: ${imageHeight}`);
     
-    // PRIMARY STRATEGY: Focus on the podcast content area (50%-100% of screen height)
+    // PRIMARY STRATEGY: Focus on the podcast content area (50%-100% of content height)
     const primaryStartY = minY + (imageHeight * 0.50);  // 50% from top
     const primaryEndY = minY + (imageHeight * 1.00);    // 100% from top (bottom of screen)
     
@@ -179,9 +325,8 @@ class VisionService {
       if (line.avgArea > 50000) {
         logger.info(`Mobile Debug: Excluding very large text: "${line.text}" (area: ${line.avgArea})`);
         return false;
-        }
+      }
       
-      logger.debug(`📱 Including line "${line.text}" - Y: ${line.avgY}, range: ${primaryStartY}-${primaryEndY}`);
       return true;
     });
     
@@ -211,11 +356,11 @@ class VisionService {
         // Exclude very large text (likely system UI)
         if (line.avgArea > 5000) {
           return false;
-      }
+        }
+        
+        return true;
+      });
       
-      return true;
-    });
-    
       logger.info(`Mobile Debug: Upper area (20%-50%) filtered to ${upperFiltered.length} lines`);
       
       // Combine primary and upper candidates
@@ -234,17 +379,17 @@ class VisionService {
     const fallbackFiltered = lines.filter(line => {
       // Must be in the fallback content area
       if (line.avgY < fallbackStartY || line.avgY > fallbackEndY) {
-          return false;
-        }
+        return false;
+      }
       
       // Exclude very large text (likely system UI)
       if (line.avgArea > 5000) {
         return false;
       }
       
-        return true;
-      });
-      
+      return true;
+    });
+    
     logger.info(`Mobile Debug: Fallback area (10%-20%) filtered to ${fallbackFiltered.length} lines`);
     
     // If fallback found candidates, use them
@@ -263,8 +408,8 @@ class VisionService {
         return false;
       }
       
-      // Only exclude very obvious system text
-      if (line.avgY < excludeTopThreshold * 1.2 && line.avgArea > 10000) {
+      // Exclude very large text (likely system UI)
+      if (line.avgArea > 10000) {
         return false;
       }
       
@@ -1452,7 +1597,7 @@ class VisionService {
       .slice(0, 8); // Limit to top 8 keywords to avoid noise
   }
 
-  extractTimestamp(textAnnotations) {
+  extractTimestamp(textAnnotations, imageDimensions) {
     try {
       logger.info(`⏰ Mobile Debug: extractTimestamp - FUNCTION CALLED with ${textAnnotations ? textAnnotations.length : 0} annotations`);
       if (!textAnnotations || textAnnotations.length === 0) return null;
@@ -1463,9 +1608,9 @@ class VisionService {
     logger.info(`⏰ Mobile Debug: extractTimestamp - Full text length: ${fullText.length}`);
     logger.info(`⏰ Mobile Debug: extractTimestamp - Individual texts count: ${individualTexts.length}`);
     
-    // Group words into lines and apply the same 50%-100% position filtering
+    // Group words into lines and apply the same position filtering with image dimensions
     const lines = this.groupWordsIntoLines(individualTexts);
-    const filteredLines = this.filterByPosition(lines);
+    const filteredLines = this.filterByPosition(lines, imageDimensions);
     
     logger.info(`⏰ Mobile Debug: extractTimestamp - Lines after grouping: ${lines.length}`);
     logger.info(`⏰ Mobile Debug: extractTimestamp - Lines after position filtering: ${filteredLines.length}`);
