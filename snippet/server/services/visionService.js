@@ -57,7 +57,7 @@ class VisionService {
 
   async extractText(imagePath) {
     try {
-      logger.info('📱 Mobile Debug: Starting Vision API text detection', {
+      logger.info('Mobile Debug: Starting Vision API text detection', {
         imagePath,
         fileExists: require('fs').existsSync(imagePath)
       });
@@ -70,7 +70,7 @@ class VisionService {
       const visionCall = this.client.textDetection(imagePath);
       const [result] = await Promise.race([visionCall, timeout]);
       
-      logger.info('📱 Mobile Debug: Vision API call completed successfully');
+      logger.info('Mobile Debug: Vision API call completed successfully');
       const detections = result.textAnnotations;
       
       if (!detections || detections.length === 0) {
@@ -83,7 +83,7 @@ class VisionService {
       // Extract structured information
       const candidates = this.extractTextCandidates(detections);
       const timestamp = this.extractTimestamp(detections);
-      logger.info(`📱 Mobile Debug: extractText - Timestamp extracted: ${timestamp}`);
+      logger.info(`⏰ Mobile Debug: extractText - Timestamp extracted: ${timestamp}`);
       
       logger.info(`Found ${candidates.length} text candidates`);
       
@@ -101,7 +101,7 @@ class VisionService {
         rawText: fullText
       };
     } catch (error) {
-      logger.error('📱 Mobile Debug: Error in Vision API:', {
+      logger.error('Mobile Debug: Error in Vision API:', {
         error: error.message,
         code: error.code,
         stack: error.stack,
@@ -127,7 +127,7 @@ class VisionService {
     // Group words into lines
     const lines = this.groupWordsIntoLines(individualTexts);
     
-    logger.info(`📱 Mobile Debug: All lines before position filtering:`, lines.map(line => 
+    logger.info(`Mobile Debug: All lines before position filtering:`, lines.map(line => 
       `"${line.text}" (Y: ${line.avgY}, X: ${line.words ? line.words[0].boundingPoly.vertices[0].x : 0}, Area: ${line.avgArea})`
     ));
     
@@ -149,7 +149,7 @@ class VisionService {
   filterByPosition(lines) {
     if (lines.length === 0) return lines;
     
-    logger.info(`📱 Mobile Debug: Position filtering ${lines.length} input lines`);
+    logger.info(`Mobile Debug: Position filtering ${lines.length} input lines`);
     
     // Calculate image dimensions
     const maxY = Math.max(...lines.map(line => line.avgY));
@@ -159,25 +159,25 @@ class VisionService {
       line.words ? Math.max(...line.words.map(w => w.boundingPoly.vertices[1].x)) : 0
     ));
     
-    logger.info(`📱 Mobile Debug: Image dimensions: ${imageWidth}x${imageHeight}`);
-    logger.info(`📱 Mobile Debug: minY: ${minY}, maxY: ${maxY}, imageHeight: ${imageHeight}`);
+    logger.info(`Mobile Debug: Image dimensions: ${imageWidth}x${imageHeight}`);
+    logger.info(`Mobile Debug: minY: ${minY}, maxY: ${maxY}, imageHeight: ${imageHeight}`);
     
     // PRIMARY STRATEGY: Focus on the podcast content area (50%-100% of screen height)
     const primaryStartY = minY + (imageHeight * 0.50);  // 50% from top
     const primaryEndY = minY + (imageHeight * 1.00);    // 100% from top (bottom of screen)
     
-    logger.info(`📱 Mobile Debug: Primary range: ${primaryStartY}-${primaryEndY} (50%-100%)`);
+    logger.info(`Mobile Debug: Primary range: ${primaryStartY}-${primaryEndY} (50%-100%)`);
     
     const primaryFiltered = lines.filter(line => {
       // Must be in the primary content area
       if (line.avgY < primaryStartY || line.avgY > primaryEndY) {
-        logger.info(`📱 Mobile Debug: Excluding "${line.text}" - Y: ${line.avgY}, range: ${primaryStartY}-${primaryEndY}`);
+        logger.info(`Mobile Debug: Excluding "${line.text}" - Y: ${line.avgY}, range: ${primaryStartY}-${primaryEndY}`);
         return false;
       }
       
       // Exclude very large text (likely system UI or clock displays)
       if (line.avgArea > 50000) {
-        logger.info(`📱 Mobile Debug: Excluding very large text: "${line.text}" (area: ${line.avgArea})`);
+        logger.info(`Mobile Debug: Excluding very large text: "${line.text}" (area: ${line.avgArea})`);
         return false;
         }
       
@@ -185,9 +185,9 @@ class VisionService {
       return true;
     });
     
-    logger.info(`📱 Mobile Debug: Primary area (50%-100%) filtered to ${primaryFiltered.length} lines`);
+    logger.info(`Mobile Debug: Primary area (50%-100%) filtered to ${primaryFiltered.length} lines`);
     if (primaryFiltered.length > 0) {
-      logger.info(`📱 Mobile Debug: Included lines:`, primaryFiltered.map(line => 
+      logger.info(`Mobile Debug: Included lines:`, primaryFiltered.map(line => 
         `"${line.text}" (Y: ${line.avgY})`
       ));
     }
@@ -199,7 +199,7 @@ class VisionService {
     
     // If primary area has some candidates but not enough, try to include upper content
     if (primaryFiltered.length === 1) {
-      logger.info('📱 Mobile Debug: Primary area has 1 candidate, trying to include upper content');
+      logger.info('Mobile Debug: Primary area has 1 candidate, trying to include upper content');
       const upperStartY = minY + (imageHeight * 0.20);  // 20% from top
       const upperEndY = minY + (imageHeight * 0.50);    // 50% from top
       
@@ -216,18 +216,18 @@ class VisionService {
       return true;
     });
     
-      logger.info(`📱 Mobile Debug: Upper area (20%-50%) filtered to ${upperFiltered.length} lines`);
+      logger.info(`Mobile Debug: Upper area (20%-50%) filtered to ${upperFiltered.length} lines`);
       
       // Combine primary and upper candidates
       const combinedCandidates = [...primaryFiltered, ...upperFiltered];
       if (combinedCandidates.length >= 2) {
-        logger.info(`📱 Mobile Debug: Combined candidates: ${combinedCandidates.length} total`);
+        logger.info(`Mobile Debug: Combined candidates: ${combinedCandidates.length} total`);
         return combinedCandidates;
       }
     }
     
     // FALLBACK STRATEGY: Search in 10%-20% area (upper content area)
-    logger.info('📱 Mobile Debug: Primary area insufficient, trying fallback area (10%-20%)');
+    logger.info('Mobile Debug: Primary area insufficient, trying fallback area (10%-20%)');
     const fallbackStartY = minY + (imageHeight * 0.10);  // 10% from top
     const fallbackEndY = minY + (imageHeight * 0.20);    // 20% from top
     
@@ -245,7 +245,7 @@ class VisionService {
         return true;
       });
       
-    logger.info(`📱 Mobile Debug: Fallback area (10%-20%) filtered to ${fallbackFiltered.length} lines`);
+    logger.info(`Mobile Debug: Fallback area (10%-20%) filtered to ${fallbackFiltered.length} lines`);
     
     // If fallback found candidates, use them
     if (fallbackFiltered.length >= 2) {
@@ -253,7 +253,7 @@ class VisionService {
     }
     
     // LAST RESORT: Very lenient filtering
-    logger.info('📱 Mobile Debug: Both areas insufficient, using very lenient fallback');
+    logger.info('Mobile Debug: Both areas insufficient, using very lenient fallback');
     const excludeTopThreshold = minY + (imageHeight * 0.15);
     const excludeBottomThreshold = maxY - (imageHeight * 0.05);
     
@@ -271,7 +271,7 @@ class VisionService {
       return true;
     });
     
-    logger.info(`📱 Mobile Debug: Last resort filtered to ${lastResortFiltered.length} lines`);
+    logger.info(`Mobile Debug: Last resort filtered to ${lastResortFiltered.length} lines`);
     return lastResortFiltered;
   }
 
@@ -327,18 +327,18 @@ class VisionService {
     const text = line.text.toLowerCase().trim();
     const originalText = line.text.trim();
     
-    logger.info(`📱 Mobile Debug: isValidCandidate checking: "${originalText}" (area: ${line.avgArea}, wordCount: ${line.wordCount}, length: ${text.length}, config range: ${this.config.minCandidateLength}-${this.config.maxCandidateLength})`);
+    logger.info(`Mobile Debug: isValidCandidate checking: "${originalText}" (area: ${line.avgArea}, wordCount: ${line.wordCount}, length: ${text.length}, config range: ${this.config.minCandidateLength}-${this.config.maxCandidateLength})`);
     
     // Basic length and word count filters - be more lenient for single words
     if (text.length < this.config.minCandidateLength || 
         text.length > this.config.maxCandidateLength) {
-        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - length ${text.length} outside range ${this.config.minCandidateLength}-${this.config.maxCandidateLength}`);
+        logger.info(`Mobile Debug: Rejecting "${originalText}" - length ${text.length} outside range ${this.config.minCandidateLength}-${this.config.maxCandidateLength}`);
         return false;
       }
       
     // For word count: allow single words if they're substantial (like podcast names)
     if (line.wordCount < 1) {
-        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - word count ${line.wordCount} < 1`);
+        logger.info(`Mobile Debug: Rejecting "${originalText}" - word count ${line.wordCount} < 1`);
         return false;
       }
       
@@ -354,21 +354,21 @@ class VisionService {
     ];
     
     if (systemUITexts.some(systemText => text.includes(systemText))) {
-      logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - system UI text`);
+      logger.info(`Mobile Debug: Rejecting "${originalText}" - system UI text`);
       return false;
     }
     
     // Exclude very small text (likely thumbnail overlays or UI elements)
     if (line.avgArea < 2500) {
-      logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - area ${line.avgArea} < 2500`);
+      logger.info(`Mobile Debug: Rejecting "${originalText}" - area ${line.avgArea} < 2500`);
       return false;
     }
     
-    logger.info(`📱 Mobile Debug: "${originalText}" passed area check (area: ${line.avgArea})`);
+    logger.info(`Mobile Debug: "${originalText}" passed area check (area: ${line.avgArea})`);
       
     // If it's a single word, it should be substantial (not just a short word)
     if (line.wordCount === 1 && text.length < 6) {
-        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - single word too short (length: ${text.length})`);
+        logger.info(`Mobile Debug: Rejecting "${originalText}" - single word too short (length: ${text.length})`);
         return false;
       }
       
@@ -376,31 +376,31 @@ class VisionService {
     
     // 1. Time patterns (any language)
     if (this.isTimePattern(text)) {
-        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - time pattern`);
+        logger.info(`Mobile Debug: Rejecting "${originalText}" - time pattern`);
         return false;
       }
       
     // 2. Date patterns (any language)
     if (this.isDatePattern(text)) {
-        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - date pattern`);
+        logger.info(`Mobile Debug: Rejecting "${originalText}" - date pattern`);
         return false;
       }
       
     // 3. Percentage patterns
     if (/\b\d+%/.test(text)) {
-        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - percentage pattern`);
+        logger.info(`Mobile Debug: Rejecting "${originalText}" - percentage pattern`);
         return false;
       }
       
     // 4. Pure numbers or symbols
     if (/^[\d\s\-:]+$/.test(text) || /^[^\w\s]+$/.test(text)) {
-        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - pure numbers/symbols`);
+        logger.info(`Mobile Debug: Rejecting "${originalText}" - pure numbers/symbols`);
         return false;
       }
       
     // 5. Single character or very short words
     if (/^.{1,2}$/.test(text.replace(/\s/g, ''))) {
-        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - single character or very short words`);
+        logger.info(`Mobile Debug: Rejecting "${originalText}" - single character or very short words`);
         return false;
       }
       
@@ -412,14 +412,14 @@ class VisionService {
     
     // 8. Ellipsis filter - Reject candidates with 4+ periods in a row (UI loading indicators)
     if (/\.{4,}/.test(text)) {
-      logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - contains 4+ periods in a row (UI loading indicator)`);
+              logger.info(`Mobile Debug: Rejecting "${originalText}" - contains 4+ periods in a row (UI loading indicator)`);
       return false;
     }
     
     // 9. System text structure filter - REMOVED to allow episode titles with numbers and colons
     // This was filtering out valid episode titles like "You 2.0 : The Passion Pill"
     
-    logger.info(`📱 Mobile Debug: "${originalText}" PASSED all filters!`);
+    logger.info(`Mobile Debug: "${originalText}" PASSED all filters!`);
     return true;
   }
 
@@ -436,14 +436,20 @@ class VisionService {
   isDatePattern(text) {
     // Universal date indicators (language-agnostic)
     
-    // Contains numbers with date-like separators
+    // Contains numbers with date-like separators (but not version numbers like 2.0)
     if (/\d+[\/\-\.]\d+([\/\-\.]\d+)?/.test(text)) {
-      return true;
+      // Exclude version numbers like "2.0", "1.5", etc.
+      if (!/\d+\.\d+/.test(text) || text.length < 10) {
+        return true;
+      }
     }
     
-    // Day-month patterns (any language)
+    // Day-month patterns (any language) - but not version numbers
     if (/\d{1,2}\s+\w+/.test(text) && text.length < 25) {
-      return true;
+      // Exclude patterns like "2.0" where the space might be interpreted as \s+
+      if (!/\d+\.\d+/.test(text)) {
+        return true;
+      }
     }
     
     // Month-day patterns 
@@ -629,7 +635,7 @@ class VisionService {
   }
 
   async validateCandidates(candidates) {
-    logger.info('Starting spatial pair validation process...');
+    logger.info('🎧 Starting spatial pair validation process...');
     
     // Strategy 1: Find spatially close pairs and validate them
     const spatialPairs = this.findSpatialPairs(candidates);
@@ -638,16 +644,16 @@ class VisionService {
     const validatedPodcasts = [];
     
     for (const pair of spatialPairs) {
-      logger.info(`Testing spatial pair: top="${pair.top.text}" bottom="${pair.bottom.text}" (distance: ${pair.distance}px)`);
+      logger.info(`🎧 Testing spatial pair: top="${pair.top.text}" bottom="${pair.bottom.text}" (distance: ${pair.distance}px)`);
       
       // Test assumption: bottom = podcast, top = episode
       const result1 = await this.validateSpatialPair(pair.bottom, pair.top, 'podcast-episode');
       if (result1.success) {
-        logger.info('Spatial pair validation successful (bottom=podcast, top=episode)');
+        logger.info('🎧 Spatial pair validation successful (bottom=podcast, top=episode)');
         return result1; // Return immediately if we get a complete success
       } else if (result1.podcastValidated) {
         // Podcast validated but episode didn't - save the validated podcast
-        logger.info(`Podcast validated but episode failed, saving for cross-pair testing: ${result1.validatedPodcast.title}`);
+                  logger.info(`🎧 Podcast validated but episode failed, saving for cross-pair testing: ${result1.validatedPodcast.title}`);
         validatedPodcasts.push({
           validatedPodcast: result1.validatedPodcast,
           confidence: result1.podcastConfidence,
@@ -659,11 +665,11 @@ class VisionService {
       // Fallback: top = podcast, bottom = episode
       const result2 = await this.validateSpatialPair(pair.top, pair.bottom, 'episode-podcast');
       if (result2.success) {
-        logger.info('Spatial pair validation successful (top=podcast, bottom=episode)');
+        logger.info('🎧 Spatial pair validation successful (top=podcast, bottom=episode)');
         return result2; // Return immediately if we get a complete success
       } else if (result2.podcastValidated) {
         // Podcast validated but episode didn't - save the validated podcast
-        logger.info(`Podcast validated but episode failed, saving for cross-pair testing: ${result2.validatedPodcast.title}`);
+                  logger.info(`🎧 Podcast validated but episode failed, saving for cross-pair testing: ${result2.validatedPodcast.title}`);
         validatedPodcasts.push({
           validatedPodcast: result2.validatedPodcast,
           confidence: result2.podcastConfidence,
@@ -675,20 +681,20 @@ class VisionService {
     
     // Strategy 2: Cross-pair testing - try validated podcasts with episode candidates from pairs containing that podcast
     if (validatedPodcasts.length > 0) {
-      logger.info(`Found ${validatedPodcasts.length} validated podcasts from spatial pairs, trying cross-pair episode matching...`);
+      logger.info(`🎧 Found ${validatedPodcasts.length} validated podcasts from spatial pairs, trying cross-pair episode matching...`);
       
       // Sort validated podcasts by confidence (highest first)
       validatedPodcasts.sort((a, b) => b.confidence - a.confidence);
       
       for (const { validatedPodcast, confidence: podcastConfidence, sourcePair, sourceCandidate } of validatedPodcasts) {
-        logger.info(`Testing validated podcast "${validatedPodcast.title}" with episode candidates from pairs containing "${sourceCandidate}"...`);
+        logger.info(`🎧 Testing validated podcast "${validatedPodcast.title}" with episode candidates from pairs containing "${sourceCandidate}"...`);
         
         // Find all pairs that contain the original podcast candidate text
         const relevantPairs = spatialPairs.filter(pair => 
           pair.top.text === sourceCandidate || pair.bottom.text === sourceCandidate
         );
         
-        logger.info(`Found ${relevantPairs.length} pairs containing "${sourceCandidate}":`, 
+        logger.info(`🎧 Found ${relevantPairs.length} pairs containing "${sourceCandidate}":`, 
           relevantPairs.map(p => `"${p.top.text}" + "${p.bottom.text}"`));
         
         // Collect episode candidates from relevant pairs
@@ -701,7 +707,7 @@ class VisionService {
           }
         }
         
-        logger.info(`Episode candidates from relevant pairs:`, relevantEpisodeCandidates);
+        logger.info(`🎧 Episode candidates from relevant pairs:`, relevantEpisodeCandidates);
         
         // Try each relevant episode candidate with this validated podcast
         for (const episodeText of relevantEpisodeCandidates) {
@@ -710,7 +716,7 @@ class VisionService {
             continue;
           }
           
-          logger.info(`Testing episode candidate "${episodeText}" with validated podcast "${validatedPodcast.title}"`);
+          logger.info(`🎧 Testing episode candidate "${episodeText}" with validated podcast "${validatedPodcast.title}"`);
           
           // Try exact episode validation first
           try {
@@ -721,7 +727,7 @@ class VisionService {
             
             if (exactEpisodeValidation.validated && 
                 exactEpisodeValidation.validatedEpisode?.confidence >= 0.5) {
-              logger.info(`Cross-pair exact episode validation successful: "${exactEpisodeValidation.validatedEpisode.title}"`);
+              logger.info(`🎧 Cross-pair exact episode validation successful: "${exactEpisodeValidation.validatedEpisode.title}"`);
               return {
                 success: true,
                 podcastTitle: validatedPodcast.title,
@@ -747,14 +753,14 @@ class VisionService {
               };
             }
           } catch (error) {
-            logger.debug('Cross-pair exact episode validation failed, trying fuzzy search:', error.message);
+            logger.debug('🎧 Cross-pair exact episode validation failed, trying fuzzy search:', error.message);
           }
           
           // Try fuzzy search for episode
           const fuzzyResult = await this.fuzzySearchEpisode(validatedPodcast, episodeText);
           
           if (fuzzyResult.success) {
-            logger.info(`Cross-pair fuzzy episode search successful: "${fuzzyResult.episodeTitle}"`);
+            logger.info(`🎧 Cross-pair fuzzy episode search successful: "${fuzzyResult.episodeTitle}"`);
             return {
               success: true,
               podcastTitle: validatedPodcast.title,
@@ -784,7 +790,7 @@ class VisionService {
     }
     
     // Strategy 3: If no cross-pair matches, try individual candidates as podcasts
-    logger.info('No cross-pair matches found, trying individual candidates...');
+    logger.info('🎧 No cross-pair matches found, trying individual candidates...');
     
     // Collect all validated podcasts from individual candidates
     const individualValidatedPodcasts = [];
@@ -794,7 +800,7 @@ class VisionService {
         
         if (validation.validated && 
             validation.validatedPodcast?.confidence >= this.config.validationConfidenceThreshold) {
-          logger.info(`Individual podcast validation successful: ${candidate.text}`);
+          logger.info(`🎧 Individual podcast validation successful: ${candidate.text}`);
           individualValidatedPodcasts.push({
             candidate,
             validation,
@@ -802,7 +808,7 @@ class VisionService {
           });
         }
       } catch (error) {
-        logger.debug(`Individual podcast validation error for ${candidate.text}:`, error.message);
+        logger.debug(`🎧 Individual podcast validation error for ${candidate.text}:`, error.message);
       }
     }
     
@@ -811,14 +817,14 @@ class VisionService {
     
     // Try each validated podcast with episode search
     for (const { candidate, validation } of individualValidatedPodcasts) {
-      logger.info(`Trying episode search for validated podcast: ${validation.validatedPodcast.title}`);
+      logger.info(`🎧 Trying episode search for validated podcast: ${validation.validatedPodcast.title}`);
       
       // Find the closest candidate directly above or below (Y-axis only)
       const otherCandidates = candidates.filter(c => c.text !== candidate.text);
       const episodeCandidate = this.findClosestVerticalCandidate(candidate, otherCandidates);
       
       if (episodeCandidate) {
-        logger.info(`Found closest vertical candidate: "${episodeCandidate.text}" (${Math.abs(episodeCandidate.avgY - candidate.avgY)}px away)`);
+        logger.info(`🎧 Found closest vertical candidate: "${episodeCandidate.text}" (${Math.abs(episodeCandidate.avgY - candidate.avgY)}px away)`);
         
         // Try to validate this episode with the podcast
         const episodeValidation = await applePodcastsService.validatePodcastInfo(
@@ -870,13 +876,13 @@ class VisionService {
       }
       
       // Try broad episode search with this podcast
-      logger.info(`Trying broad episode search for podcast: ${validation.validatedPodcast.title}`);
+      logger.info(`🎧 Trying broad episode search for podcast: ${validation.validatedPodcast.title}`);
       try {
         const episodeResults = await applePodcastsService.searchEpisodes(validation.validatedPodcast.id, null);
         
         if (episodeResults && episodeResults.length > 0) {
           const bestMatch = episodeResults[0];
-          logger.info(`Episode search match found: ${bestMatch.trackName} from ${validation.validatedPodcast.title}`);
+          logger.info(`🎧 Episode search match found: ${bestMatch.trackName} from ${validation.validatedPodcast.title}`);
           
           return {
             podcastTitle: validation.validatedPodcast.title,
@@ -897,14 +903,14 @@ class VisionService {
                   };
                 }
               } catch (error) {
-        logger.debug(`Episode search error for ${validation.validatedPodcast.title}:`, error.message);
+        logger.debug(`🎧 Episode search error for ${validation.validatedPodcast.title}:`, error.message);
       }
     }
     
     // If we have validated podcasts but no episodes found, return the best one with "Unknown Episode"
     if (individualValidatedPodcasts.length > 0) {
       const bestPodcast = individualValidatedPodcasts[0];
-      logger.info(`Returning best validated podcast with unknown episode: ${bestPodcast.validation.validatedPodcast.title}`);
+      logger.info(`🎧 Returning best validated podcast with unknown episode: ${bestPodcast.validation.validatedPodcast.title}`);
       
       return {
         podcastTitle: bestPodcast.validation.validatedPodcast.title,
@@ -916,14 +922,14 @@ class VisionService {
     }
     
     // Strategy 3: Broad episode search as final fallback
-    logger.info('Trying broad episode search as final fallback...');
+    logger.info('🎧 Trying broad episode search as final fallback...');
     for (const candidate of candidates) {
       try {
         const episodeResults = await applePodcastsService.searchEpisodes(null, candidate.text);
         
         if (episodeResults && episodeResults.length > 0) {
           const bestMatch = episodeResults[0];
-          logger.info(`Episode search match found: ${bestMatch.trackName} from ${bestMatch.collectionName}`);
+          logger.info(`🎧 Episode search match found: ${bestMatch.trackName} from ${bestMatch.collectionName}`);
                     
                     return {
             podcastTitle: bestMatch.collectionName,
@@ -938,12 +944,12 @@ class VisionService {
           };
               }
             } catch (error) {
-        logger.debug(`Episode search error for ${candidate.text}:`, error.message);
+        logger.debug(`🎧 Episode search error for ${candidate.text}:`, error.message);
       }
     }
     
     // Fallback: No validation successful, return "Episode not found"
-    logger.info('No validation successful, returning "Episode not found"');
+    logger.info('🎧 No validation successful, returning "Episode not found"');
     
             return {
       podcastTitle: 'Episode not found',
@@ -1037,7 +1043,7 @@ class VisionService {
       return a.similarity - b.similarity;
     });
     
-    logger.info(`Found ${pairs.length} spatial pairs:`, pairs.map(p => {
+    logger.info(`🎧 Found ${pairs.length} spatial pairs:`, pairs.map(p => {
       const avgY = (p.top.avgY + p.bottom.avgY) / 2;
       return `"${p.top.text}" + "${p.bottom.text}" (avgY: ${avgY.toFixed(0)}, ${p.distance}px apart, similarity: ${(p.similarity * 100).toFixed(1)}%)`;
     }));
@@ -1121,25 +1127,25 @@ class VisionService {
 
   async validateSpatialPair(podcastCandidate, episodeCandidate, pairType) {
     try {
-      logger.info(`Validating spatial pair (${pairType}): podcast="${podcastCandidate.text}" episode="${episodeCandidate.text}"`);
+      logger.info(`🎧 Validating spatial pair (${pairType}): podcast="${podcastCandidate.text}" episode="${episodeCandidate.text}"`);
       
       // Step 1: Validate the podcast candidate (pass episode title for fuzzy search)
       const podcastValidation = await applePodcastsService.validatePodcastInfo(podcastCandidate.text, episodeCandidate.text);
       
       if (!podcastValidation.validatedPodcast || 
           podcastValidation.validatedPodcast?.confidence < this.config.validationConfidenceThreshold) {
-        logger.info(`Podcast validation failed for "${podcastCandidate.text}" (confidence: ${podcastValidation.validatedPodcast?.confidence || 0})`);
+        logger.info(`🎧 Podcast validation failed for "${podcastCandidate.text}" (confidence: ${podcastValidation.validatedPodcast?.confidence || 0})`);
         return { 
           success: false,
           podcastValidated: false
         };
       }
       
-      logger.info(`Podcast validated: "${podcastValidation.validatedPodcast.title}" (confidence: ${podcastValidation.validatedPodcast.confidence})`);
+      logger.info(`🎧 Podcast validated: "${podcastValidation.validatedPodcast.title}" (confidence: ${podcastValidation.validatedPodcast.confidence})`);
       
       // Check if fuzzy podcast search already found an episode
       if (podcastValidation.validatedEpisode) {
-        logger.info(`Fuzzy podcast search already found episode: "${podcastValidation.validatedEpisode.title}"`);
+        logger.info(`🎧 Fuzzy podcast search already found episode: "${podcastValidation.validatedEpisode.title}"`);
         return {
           success: true,
           podcastTitle: podcastValidation.validatedPodcast.title,
@@ -1177,7 +1183,7 @@ class VisionService {
         
         if (exactEpisodeValidation.validated && 
             exactEpisodeValidation.validatedEpisode?.confidence >= 0.5) {
-          logger.info(`Exact episode validation successful: "${exactEpisodeValidation.validatedEpisode.title}"`);
+          logger.info(`🎧 Exact episode validation successful: "${exactEpisodeValidation.validatedEpisode.title}"`);
                       return {
                         success: true,
             podcastTitle: podcastValidation.validatedPodcast.title,
@@ -1205,18 +1211,18 @@ class VisionService {
                       };
                     }
                   } catch (error) {
-        logger.debug('Exact episode validation failed, trying fuzzy search:', error.message);
+        logger.debug('🎧 Exact episode validation failed, trying fuzzy search:', error.message);
       }
       
       // Step 3: Fuzzy search for episode using keywords
-      logger.info(`Trying fuzzy episode search for podcast "${podcastValidation.validatedPodcast.title}"`);
+      logger.info(`🎧 Trying fuzzy episode search for podcast "${podcastValidation.validatedPodcast.title}"`);
       const fuzzyResult = await this.fuzzySearchEpisode(
         podcastValidation.validatedPodcast, 
         episodeCandidate.text
       );
       
       if (fuzzyResult.success) {
-        logger.info(`Fuzzy episode search successful: "${fuzzyResult.episodeTitle}"`);
+        logger.info(`🎧 Fuzzy episode search successful: "${fuzzyResult.episodeTitle}"`);
               return {
                 success: true,
           podcastTitle: podcastValidation.validatedPodcast.title,
@@ -1245,7 +1251,7 @@ class VisionService {
         };
       }
       
-      logger.info(`No episode match found for "${episodeCandidate.text}" in podcast "${podcastValidation.validatedPodcast.title}"`);
+      logger.info(`🎧 No episode match found for "${episodeCandidate.text}" in podcast "${podcastValidation.validatedPodcast.title}"`);
       return { 
         success: false,
         podcastValidated: true,
@@ -1254,7 +1260,7 @@ class VisionService {
       };
       
     } catch (error) {
-      logger.error(`Error validating spatial pair:`, error);
+      logger.error(`🎧 Error validating spatial pair:`, error);
       return { 
         success: false,
         podcastValidated: false
@@ -1276,11 +1282,11 @@ class VisionService {
       const keywords = this.extractKeywords(episodeText);
       
       if (keywords.length === 0) {
-        logger.info(`No keywords extracted from "${episodeText}"`);
+        logger.info(`🎧 No keywords extracted from "${episodeText}"`);
         return { success: false };
       }
       
-      logger.info(`Fuzzy searching with keywords: [${keywords.join(', ')}] among ${allEpisodes.length} episodes`);
+      logger.info(`🎧 Fuzzy searching with keywords: [${keywords.join(', ')}] among ${allEpisodes.length} episodes`);
       
       // Find episodes that match multiple keywords with improved fuzzy matching
       const matchingEpisodes = allEpisodes.map(episode => {
@@ -1311,7 +1317,7 @@ class VisionService {
       
       if (matchingEpisodes.length > 0) {
         const bestMatch = matchingEpisodes[0];
-        logger.info(`Best fuzzy match: "${bestMatch.episode.trackName}" (score: ${bestMatch.matchScore.toFixed(2)}, exact: ${bestMatch.exactMatches}, partial: ${bestMatch.partialMatches})`);
+        logger.info(`🎧 Best fuzzy match: "${bestMatch.episode.trackName}" (score: ${bestMatch.matchScore.toFixed(2)}, exact: ${bestMatch.exactMatches}, partial: ${bestMatch.partialMatches})`);
         
     return {
           success: true,
@@ -1326,11 +1332,11 @@ class VisionService {
         };
       }
       
-      logger.info(`No episodes found with match score >= 0.3`);
+              logger.info(`🎧 No episodes found with match score >= 0.3`);
       return { success: false };
       
     } catch (error) {
-      logger.error('Error in fuzzy episode search:', error);
+      logger.error('🎧 Error in fuzzy episode search:', error);
       return { success: false };
     }
   }
@@ -1366,7 +1372,7 @@ class VisionService {
             };
           }
         } catch (error) {
-          logger.debug(`Episode validation error:`, error.message);
+          logger.debug(`🎧 Episode validation error:`, error.message);
         }
         
         // Keyword matching with actual episodes
@@ -1386,7 +1392,7 @@ class VisionService {
         }
       }
     } catch (error) {
-      logger.error('Error finding episode for podcast:', error);
+      logger.error('🎧 Error finding episode for podcast:', error);
     }
     
     return null;
@@ -1430,25 +1436,25 @@ class VisionService {
 
   extractTimestamp(textAnnotations) {
     try {
-      logger.info(`📱 Mobile Debug: extractTimestamp - FUNCTION CALLED with ${textAnnotations ? textAnnotations.length : 0} annotations`);
+      logger.info(`⏰ Mobile Debug: extractTimestamp - FUNCTION CALLED with ${textAnnotations ? textAnnotations.length : 0} annotations`);
       if (!textAnnotations || textAnnotations.length === 0) return null;
       
       const fullText = textAnnotations[0].description;
       const individualTexts = textAnnotations.slice(1);
     
-    logger.info(`📱 Mobile Debug: extractTimestamp - Full text length: ${fullText.length}`);
-    logger.info(`📱 Mobile Debug: extractTimestamp - Individual texts count: ${individualTexts.length}`);
+    logger.info(`⏰ Mobile Debug: extractTimestamp - Full text length: ${fullText.length}`);
+    logger.info(`⏰ Mobile Debug: extractTimestamp - Individual texts count: ${individualTexts.length}`);
     
     // Group words into lines and apply the same 50%-100% position filtering
     const lines = this.groupWordsIntoLines(individualTexts);
     const filteredLines = this.filterByPosition(lines);
     
-    logger.info(`📱 Mobile Debug: extractTimestamp - Lines after grouping: ${lines.length}`);
-    logger.info(`📱 Mobile Debug: extractTimestamp - Lines after position filtering: ${filteredLines.length}`);
+    logger.info(`⏰ Mobile Debug: extractTimestamp - Lines after grouping: ${lines.length}`);
+    logger.info(`⏰ Mobile Debug: extractTimestamp - Lines after position filtering: ${filteredLines.length}`);
     
     // Log all lines for debugging
     filteredLines.forEach((line, index) => {
-      logger.info(`📱 Mobile Debug: extractTimestamp - Line ${index}: "${line.text}" (Y: ${line.avgY}, Area: ${line.avgArea})`);
+      logger.info(`⏰ Mobile Debug: extractTimestamp - Line ${index}: "${line.text}" (Y: ${line.avgY}, Area: ${line.avgArea})`);
     });
     
     // Extract time patterns from filtered lines only
@@ -1467,36 +1473,36 @@ class VisionService {
       });
     });
     
-    logger.info(`📱 Mobile Debug: extractTimestamp - Candidate timestamps found: ${candidateTimestamps.length}`);
+    logger.info(`⏰ Mobile Debug: extractTimestamp - Candidate timestamps found: ${candidateTimestamps.length}`);
     candidateTimestamps.forEach((candidate, index) => {
-      logger.info(`📱 Mobile Debug: extractTimestamp - Candidate ${index}: "${candidate.time}" (Y: ${candidate.y}, Area: ${candidate.area})`);
+      logger.info(`⏰ Mobile Debug: extractTimestamp - Candidate ${index}: "${candidate.time}" (Y: ${candidate.y}, Area: ${candidate.area})`);
     });
     
     if (candidateTimestamps.length === 0) {
-      logger.info(`📱 Mobile Debug: extractTimestamp - No candidates in filtered lines, trying fallback`);
+      logger.info(`⏰ Mobile Debug: extractTimestamp - No candidates in filtered lines, trying fallback`);
       // Fallback: extract from full text but still filter clock times
     const allTimes = [...fullText.matchAll(timeRegex)].map(m => m[0]);
-      logger.info(`📱 Mobile Debug: extractTimestamp - All times in full text: ${allTimes.join(', ')}`);
+      logger.info(`⏰ Mobile Debug: extractTimestamp - All times in full text: ${allTimes.join(', ')}`);
       const fallbackResult = this.filterClockTimes(allTimes, fullText);
-      logger.info(`📱 Mobile Debug: extractTimestamp - Fallback result: ${fallbackResult}`);
+      logger.info(`⏰ Mobile Debug: extractTimestamp - Fallback result: ${fallbackResult}`);
       return fallbackResult;
     }
     
     // Filter out clock times and UI timestamps
     const podcastTimestamps = candidateTimestamps.filter(candidate => {
-      logger.info(`📱 Mobile Debug: extractTimestamp - Filtering candidate: "${candidate.time}"`);
+      logger.info(`⏰ Mobile Debug: extractTimestamp - Filtering candidate: "${candidate.time}"`);
       
-      // Exclude very large text (likely clock display)
-      if (candidate.area > 5000) {
-        logger.info(`📱 Mobile Debug: extractTimestamp - Excluded "${candidate.time}" due to large area: ${candidate.area}`);
+              // Exclude very large text (likely clock display)
+        if (candidate.area > 5000) {
+          logger.info(`⏰ Mobile Debug: extractTimestamp - Excluded "${candidate.time}" due to large area: ${candidate.area}`);
+          return false;
+        }
+      
+              // Exclude negative timestamps (remaining time)
+        if (fullText.includes('-' + candidate.time)) {
+          logger.info(`⏰ Mobile Debug: extractTimestamp - Excluded "${candidate.time}" due to negative timestamp`);
         return false;
       }
-      
-      // Exclude negative timestamps (remaining time)
-      if (fullText.includes('-' + candidate.time)) {
-        logger.info(`📱 Mobile Debug: extractTimestamp - Excluded "${candidate.time}" due to negative timestamp`);
-      return false;
-    }
     
       // Check if this looks like a valid podcast timestamp (MM:SS format)
       const isPodcastTimestamp = /^\d{1,2}:\d{2}$/.test(candidate.time);
@@ -1504,72 +1510,72 @@ class VisionService {
       const seconds = parseInt(candidate.time.split(':')[1]);
       const isValidTimeFormat = minutes >= 0 && minutes <= 59 && seconds >= 0 && seconds <= 59;
       
-      // If it's a valid podcast timestamp format, prioritize it over context analysis
-      if (isPodcastTimestamp && isValidTimeFormat) {
-        logger.info(`📱 Mobile Debug: extractTimestamp - Accepted "${candidate.time}" as valid podcast timestamp format`);
+              // If it's a valid podcast timestamp format, prioritize it over context analysis
+        if (isPodcastTimestamp && isValidTimeFormat) {
+          logger.info(`⏰ Mobile Debug: extractTimestamp - Accepted "${candidate.time}" as valid podcast timestamp format`);
+          return true;
+        }
+      
+              // Context analysis for this specific timestamp (only for non-standard formats)
+        const context = this.getTimestampContext(fullText, candidate.time);
+        const hasClockContext = this.hasClockContext(context);
+        logger.info(`⏰ Mobile Debug: extractTimestamp - Context for "${candidate.time}": "${context}" (hasClockContext: ${hasClockContext})`);
+        
+        if (hasClockContext) {
+          logger.info(`⏰ Mobile Debug: extractTimestamp - Excluded "${candidate.time}" due to clock context`);
+          return false;
+        }
+        
+        logger.info(`⏰ Mobile Debug: extractTimestamp - Accepted "${candidate.time}" as valid timestamp`);
         return true;
-      }
-      
-      // Context analysis for this specific timestamp (only for non-standard formats)
-      const context = this.getTimestampContext(fullText, candidate.time);
-      const hasClockContext = this.hasClockContext(context);
-      logger.info(`📱 Mobile Debug: extractTimestamp - Context for "${candidate.time}": "${context}" (hasClockContext: ${hasClockContext})`);
-      
-      if (hasClockContext) {
-        logger.info(`📱 Mobile Debug: extractTimestamp - Excluded "${candidate.time}" due to clock context`);
-        return false;
-      }
-      
-      logger.info(`📱 Mobile Debug: extractTimestamp - Accepted "${candidate.time}" as valid timestamp`);
-      return true;
     });
     
-    logger.info(`📱 Mobile Debug: extractTimestamp - Final podcast timestamps: ${podcastTimestamps.length}`);
+    logger.info(`⏰ Mobile Debug: extractTimestamp - Final podcast timestamps: ${podcastTimestamps.length}`);
     podcastTimestamps.forEach((candidate, index) => {
-      logger.info(`📱 Mobile Debug: extractTimestamp - Final candidate ${index}: "${candidate.time}" (Y: ${candidate.y})`);
+      logger.info(`⏰ Mobile Debug: extractTimestamp - Final candidate ${index}: "${candidate.time}" (Y: ${candidate.y})`);
     });
     
     // Sort by Y position (prefer timestamps lower on screen in content area)
     podcastTimestamps.sort((a, b) => b.y - a.y);
     
     const result = podcastTimestamps.length > 0 ? podcastTimestamps[0].time : null;
-    logger.info(`📱 Mobile Debug: extractTimestamp - Final result: ${result}`);
+    logger.info(`⏰ Mobile Debug: extractTimestamp - Final result: ${result}`);
     return result;
     } catch (error) {
-      logger.error(`📱 Mobile Debug: extractTimestamp - ERROR: ${error.message}`);
-      logger.error(`📱 Mobile Debug: extractTimestamp - Stack: ${error.stack}`);
+      logger.error(`⏰ Mobile Debug: extractTimestamp - ERROR: ${error.message}`);
+      logger.error(`⏰ Mobile Debug: extractTimestamp - Stack: ${error.stack}`);
       return null;
     }
   }
   
   filterClockTimes(times, fullText) {
-    logger.info(`📱 Mobile Debug: filterClockTimes - Input times: ${times.join(', ')}`);
+    logger.info(`Mobile Debug: filterClockTimes - Input times: ${times.join(', ')}`);
     
     const filteredTimes = times.filter(time => {
-      logger.info(`📱 Mobile Debug: filterClockTimes - Processing time: "${time}"`);
+      logger.info(`Mobile Debug: filterClockTimes - Processing time: "${time}"`);
       
       // Exclude negative timestamps
       if (fullText.includes('-' + time)) {
-        logger.info(`📱 Mobile Debug: filterClockTimes - Excluded "${time}" due to negative timestamp`);
+        logger.info(`⏰ Mobile Debug: filterClockTimes - Excluded "${time}" due to negative timestamp`);
         return false;
       }
       
       const context = this.getTimestampContext(fullText, time);
       const hasClockContext = this.hasClockContext(context);
-      logger.info(`📱 Mobile Debug: filterClockTimes - Context for "${time}": "${context}" (hasClockContext: ${hasClockContext})`);
+              logger.info(`Mobile Debug: filterClockTimes - Context for "${time}": "${context}" (hasClockContext: ${hasClockContext})`);
       
       if (hasClockContext) {
-        logger.info(`📱 Mobile Debug: filterClockTimes - Excluded "${time}" due to clock context`);
+                  logger.info(`Mobile Debug: filterClockTimes - Excluded "${time}" due to clock context`);
         return false;
       }
       
-      logger.info(`📱 Mobile Debug: filterClockTimes - Accepted "${time}" as valid timestamp`);
+      logger.info(`⏰ Mobile Debug: filterClockTimes - Accepted "${time}" as valid timestamp`);
       return true;
     });
     
-    logger.info(`📱 Mobile Debug: filterClockTimes - Final filtered times: ${filteredTimes.join(', ')}`);
+    logger.info(`Mobile Debug: filterClockTimes - Final filtered times: ${filteredTimes.join(', ')}`);
     const result = filteredTimes.length > 0 ? filteredTimes[0] : null;
-    logger.info(`📱 Mobile Debug: filterClockTimes - Final result: ${result}`);
+    logger.info(`Mobile Debug: filterClockTimes - Final result: ${result}`);
     return result;
   }
   
