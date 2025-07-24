@@ -404,33 +404,20 @@ class VisionService {
         return false;
       }
       
-    // 6. All caps - BUT only if short and likely UI elements
-    // Allow longer all caps text that could be podcast names
-    if (originalText === originalText.toUpperCase() && 
-        originalText.length > 3 && 
-        originalText.length < 15 && 
-        line.wordCount <= 2) {
-      logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - all caps and short (length: ${originalText.length}, words: ${line.wordCount})`);
-      return false;
-    }
+    // 6. All caps filter - REMOVED to allow episode titles like "You 2.0 : The Passion Pill"
+    // This was filtering out valid episode titles that contained numbers and colons
     
     // 7. Starts with lowercase - ALLOW ALL (removed filter)
     // This allows truncated episode titles and other content that starts with lowercase
     
-    // 8. Contains ellipsis (truncated) - BUT don't filter out completely
-    if (/\.{3,}|…/.test(text)) {
-      // Allow if it's substantial content
-      if (text.length < 15) {
-        logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - contains ellipsis and too short (length: ${text.length})`);
-        return false;
-      }
-    }
-    
-    // 9. Structural indicators of system text
-    if (this.hasSystemTextStructure(text, line)) {
-      logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - system text structure`);
+    // 8. Ellipsis filter - Reject candidates with 4+ periods in a row (UI loading indicators)
+    if (/\.{4,}/.test(text)) {
+      logger.info(`📱 Mobile Debug: Rejecting "${originalText}" - contains 4+ periods in a row (UI loading indicator)`);
       return false;
     }
+    
+    // 9. System text structure filter - REMOVED to allow episode titles with numbers and colons
+    // This was filtering out valid episode titles like "You 2.0 : The Passion Pill"
     
     logger.info(`📱 Mobile Debug: "${originalText}" PASSED all filters!`);
     return true;
