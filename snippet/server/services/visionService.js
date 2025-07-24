@@ -502,14 +502,20 @@ class VisionService {
         const yMatch = Math.abs(l.avgY - y) < this.config.lineTolerance;
         if (!yMatch) return false;
         
-        // Check if heights are compatible (within 70% of each other)
+        // Special handling for punctuation marks - exempt them from height ratio check
+        const isPunctuation = /^[^\w\s]+$/.test(word.description) || word.description === ':';
+        if (isPunctuation) {
+          return true; // Allow punctuation to join any line with matching Y position
+        }
+        
+        // Check if heights are compatible (within 80% of each other)
         const lineAvgHeight = l.words.reduce((sum, w) => {
           const v = w.boundingPoly.vertices;
           return sum + Math.abs(v[2].y - v[0].y);
         }, 0) / l.words.length;
         
         const heightRatio = Math.min(wordHeight, lineAvgHeight) / Math.max(wordHeight, lineAvgHeight);
-        return heightRatio >= 0.7; // 70% height similarity threshold
+        return heightRatio >= 0.8; // 80% height similarity threshold
       });
       
       if (!line) {
