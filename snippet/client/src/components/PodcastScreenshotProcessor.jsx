@@ -19,6 +19,18 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedScreenshotIndex, setSelectedScreenshotIndex] = useState(null);
 
+  // Debug: Log when podcastInfo changes
+  useEffect(() => {
+    console.log('🔄 podcastInfo state changed:', {
+      hasPodcastInfo: !!podcastInfo,
+      success: podcastInfo?.success,
+      dataLength: podcastInfo?.data?.length || 0,
+      hasData: !!podcastInfo?.data,
+      podcastInfoKeys: podcastInfo ? Object.keys(podcastInfo) : [],
+      firstItem: podcastInfo?.data?.[0] ? 'exists' : 'missing'
+    });
+  }, [podcastInfo]);
+
   // Process initial files when component mounts
   useEffect(() => {
     if (initialFiles.length > 0) {
@@ -131,25 +143,71 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           episodeTitle: item.firstPass?.episodeTitle || item.secondPass?.episodeTitle,
           timestamp: item.firstPass?.timestamp || item.secondPass?.timestamp,
           validated: item.validation?.validated,
-          player: item.firstPass?.player || item.secondPass?.player
+          player: item.firstPass?.player || item.secondPass?.player,
+          hasError: !!item.error,
+          errorMessage: item.error || item.message,
+          // Show what's actually in the item
+          itemKeys: Object.keys(item),
+          hasFirstPass: !!item.firstPass,
+          hasSecondPass: !!item.secondPass,
+          hasValidation: !!item.validation
         })));
+        
+        // Check if extraction failed
+        result.data.forEach((item, index) => {
+          if (item.error || (!item.firstPass && !item.secondPass && !item.validation)) {
+            console.error(`❌ Extraction failed for screenshot ${index}:`, {
+              error: item.error,
+              message: item.message,
+              hasFirstPass: !!item.firstPass,
+              hasSecondPass: !!item.secondPass,
+              hasValidation: !!item.validation,
+              fullItem: item
+            });
+          }
+        });
       }
       
       console.log('📱 Mobile Debug: Setting podcastInfo state:', {
         success: result.success,
         dataLength: result.data?.length || 0,
         hasData: !!result.data,
+        resultKeys: Object.keys(result),
+        resultType: typeof result,
+        isArray: Array.isArray(result),
         firstItem: result.data?.[0] ? {
           hasValidation: !!result.data[0].validation,
           validated: result.data[0].validation?.validated,
           hasValidatedPodcast: !!result.data[0].validation?.validatedPodcast,
           hasValidatedEpisode: !!result.data[0].validation?.validatedEpisode,
           episodeTitle: result.data[0].episodeTitle || result.data[0].validation?.validatedEpisode?.title || result.data[0].secondPass?.episodeTitle || result.data[0].firstPass?.episodeTitle,
-          podcastTitle: result.data[0].podcastTitle || result.data[0].validation?.validatedPodcast?.title || result.data[0].secondPass?.podcastTitle || result.data[0].firstPass?.podcastTitle
-        } : null
+          podcastTitle: result.data[0].podcastTitle || result.data[0].validation?.validatedPodcast?.title || result.data[0].secondPass?.podcastTitle || result.data[0].firstPass?.podcastTitle,
+          // Show all available properties
+          allKeys: Object.keys(result.data[0]),
+          firstPass: result.data[0].firstPass,
+          secondPass: result.data[0].secondPass,
+          validation: result.data[0].validation,
+          error: result.data[0].error,
+          fullItem: result.data[0]
+        } : null,
+        fullResult: result
       });
       
-      setPodcastInfo(result);
+      // Ensure result has the correct structure
+      const podcastInfoToSet = {
+        success: result.success,
+        data: result.data || [],
+        error: result.error || null
+      };
+      
+      console.log('📱 Mobile Debug: About to set state with:', {
+        success: podcastInfoToSet.success,
+        dataLength: podcastInfoToSet.data?.length || 0,
+        hasData: !!podcastInfoToSet.data,
+        podcastInfoToSet
+      });
+      
+      setPodcastInfo(podcastInfoToSet);
       // Update the count of processed episodes
       setProcessedEpisodeCount(result?.data?.length || 0);
       // Clear previous transcripts when processing new screenshots
@@ -339,13 +397,26 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     const dataItem = podcastInfo?.data?.[index];
     
     if (hasData) {
+      const extractedEpisodeTitle = dataItem.episodeTitle || 
+                                   dataItem.validation?.validatedEpisode?.title || 
+                                   dataItem.secondPass?.episodeTitle || 
+                                   dataItem.firstPass?.episodeTitle ||
+                                   `Episode ${index + 1}`;
+      
       console.log(`📱 Debug: Screenshot ${index} has data:`, {
         index,
         hasValidation: !!dataItem.validation,
         validated: dataItem.validation?.validated,
-        episodeTitle: dataItem.episodeTitle || dataItem.validation?.validatedEpisode?.title || dataItem.secondPass?.episodeTitle || dataItem.firstPass?.episodeTitle,
+        episodeTitle: extractedEpisodeTitle,
         podcastTitle: dataItem.podcastTitle || dataItem.validation?.validatedPodcast?.title || dataItem.secondPass?.podcastTitle || dataItem.firstPass?.podcastTitle,
-        timestamp: dataItem.timestamp || dataItem.secondPass?.timestamp || dataItem.firstPass?.timestamp
+        timestamp: dataItem.timestamp || dataItem.secondPass?.timestamp || dataItem.firstPass?.timestamp,
+        // Show all possible sources
+        rawEpisodeTitle: dataItem.episodeTitle,
+        validatedEpisodeTitle: dataItem.validation?.validatedEpisode?.title,
+        secondPassEpisodeTitle: dataItem.secondPass?.episodeTitle,
+        firstPassEpisodeTitle: dataItem.firstPass?.episodeTitle,
+        // Show full data structure
+        fullDataItem: dataItem
       });
     } else {
       console.log(`📱 Debug: Screenshot ${index} has NO data:`, {
@@ -361,23 +432,55 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
       preview: previews[index],
       // Only show ghost loading for new episodes being added (index >= processedEpisodeCount) and only during initial processing (not transcript generation)
       shouldShowGhostLoading: isProcessing && !isGettingTranscript && index >= processedEpisodeCount,
-      podcastInfo: hasData ? {
-      episodeTitle: podcastInfo.data[index].episodeTitle ||
-                   podcastInfo.data[index].validation?.validatedEpisode?.title || 
-                   podcastInfo.data[index].secondPass?.episodeTitle || 
-                   podcastInfo.data[index].firstPass?.episodeTitle ||
-                   `Episode ${index + 1}`,
-      timestamp: podcastInfo.data[index].timestamp ||
-                podcastInfo.data[index].secondPass?.timestamp || 
-                podcastInfo.data[index].firstPass?.timestamp ||
-                '0:00',
-      podcastArtwork: podcastInfo.data[index].validation?.validatedPodcast?.artworkUrl || 
-                     podcastInfo.data[index].validation?.validatedPodcast?.artwork || 
-                     podcastInfo.data[index].validation?.validatedPodcast?.image ||
-                     podcastInfo.data[index].validation?.validatedEpisode?.artworkUrl ||
-                     podcastInfo.data[index].validation?.validatedEpisode?.artwork ||
-                     podcastInfo.data[index].validation?.validatedEpisode?.image
-    } : {
+      podcastInfo: hasData ? (() => {
+        const dataItem = podcastInfo.data[index];
+        const hasError = !!dataItem.error;
+        const hasAnyData = !!(dataItem.firstPass || dataItem.secondPass || dataItem.validation);
+        
+        // Check if extraction completely failed
+        if (hasError || !hasAnyData) {
+          console.warn(`⚠️ Screenshot ${index} extraction failed:`, {
+            error: dataItem.error,
+            message: dataItem.message,
+            hasFirstPass: !!dataItem.firstPass,
+            hasSecondPass: !!dataItem.secondPass,
+            hasValidation: !!dataItem.validation
+          });
+        }
+        
+        const finalEpisodeTitle = dataItem.episodeTitle ||
+                                 dataItem.validation?.validatedEpisode?.title || 
+                                 dataItem.secondPass?.episodeTitle || 
+                                 dataItem.firstPass?.episodeTitle ||
+                                 (hasError ? 'Extraction failed' : `Episode ${index + 1}`);
+        
+        const finalTimestamp = dataItem.timestamp ||
+                              dataItem.secondPass?.timestamp || 
+                              dataItem.firstPass?.timestamp ||
+                              '0:00';
+        
+        const finalArtwork = dataItem.validation?.validatedPodcast?.artworkUrl || 
+                            dataItem.validation?.validatedPodcast?.artwork || 
+                            dataItem.validation?.validatedPodcast?.image ||
+                            dataItem.validation?.validatedEpisode?.artworkUrl ||
+                            dataItem.validation?.validatedEpisode?.artwork ||
+                            dataItem.validation?.validatedEpisode?.image;
+        
+        console.log(`✅ Final values for Screenshot ${index}:`, {
+          episodeTitle: finalEpisodeTitle,
+          timestamp: finalTimestamp,
+          artwork: finalArtwork || 'null',
+          hasError,
+          hasAnyData
+        });
+        
+        return {
+          episodeTitle: finalEpisodeTitle,
+          timestamp: finalTimestamp,
+          podcastArtwork: finalArtwork,
+          hasError: hasError || !hasAnyData
+        };
+      })() : {
       episodeTitle: `Episode ${index + 1}`,
       timestamp: '0:00',
       podcastArtwork: null
@@ -399,6 +502,25 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
         finalArtwork: screenshots[index]?.podcastInfo?.podcastArtwork
       }))
     );
+    
+    // More detailed logging
+    podcastInfo.data.forEach((info, index) => {
+      const screenshot = screenshots[index];
+      console.log(`🔍 Detailed Debug for Screenshot ${index}:`, {
+        'Raw episodeTitle': info.episodeTitle,
+        'Validated episode title': info.validation?.validatedEpisode?.title,
+        'Second pass title': info.secondPass?.episodeTitle,
+        'First pass title': info.firstPass?.episodeTitle,
+        'Final displayed title': screenshot?.podcastInfo?.episodeTitle,
+        'Has validation': !!info.validation,
+        'Validation validated': info.validation?.validated,
+        'Has validated podcast': !!info.validation?.validatedPodcast,
+        'Has validated episode': !!info.validation?.validatedEpisode,
+        'Podcast title': info.podcastTitle || info.validation?.validatedPodcast?.title,
+        'Timestamp': info.timestamp || info.secondPass?.timestamp || info.firstPass?.timestamp,
+        'Artwork URL': screenshot?.podcastInfo?.podcastArtwork
+      });
+    });
   }
 
   // Modal handlers
