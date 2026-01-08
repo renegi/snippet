@@ -271,10 +271,8 @@ const MainContent = ({
         <div className="w-full flex flex-col items-start justify-start gap-4 text-sm">
           {screenshots.map((screenshot, index) => {
             // Use the shouldShowGhostLoading flag from the screenshot object
-            // Only fall back to checking episode title if we don't have proper podcast info
-            const isLoading = screenshot.shouldShowGhostLoading || 
-                             (!screenshot.podcastInfo?.episodeTitle || 
-                              screenshot.podcastInfo?.episodeTitle === `Episode ${index + 1}`);
+            // This flag is set by the parent component based on processing state
+            const isLoading = screenshot.shouldShowGhostLoading;
             
             if (isLoading) {
               return <SkeletonLoader key={`skeleton-${index}`} index={index} />;

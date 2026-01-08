@@ -156,6 +156,8 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
         error: error.message,
         data: []
       });
+      // Reset processed episode count on error
+      setProcessedEpisodeCount(0);
     } finally {
       setIsProcessing(false);
     }
