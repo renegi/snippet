@@ -135,6 +135,20 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
         })));
       }
       
+      console.log('📱 Mobile Debug: Setting podcastInfo state:', {
+        success: result.success,
+        dataLength: result.data?.length || 0,
+        hasData: !!result.data,
+        firstItem: result.data?.[0] ? {
+          hasValidation: !!result.data[0].validation,
+          validated: result.data[0].validation?.validated,
+          hasValidatedPodcast: !!result.data[0].validation?.validatedPodcast,
+          hasValidatedEpisode: !!result.data[0].validation?.validatedEpisode,
+          episodeTitle: result.data[0].episodeTitle || result.data[0].validation?.validatedEpisode?.title || result.data[0].secondPass?.episodeTitle || result.data[0].firstPass?.episodeTitle,
+          podcastTitle: result.data[0].podcastTitle || result.data[0].validation?.validatedPodcast?.title || result.data[0].secondPass?.podcastTitle || result.data[0].firstPass?.podcastTitle
+        } : null
+      });
+      
       setPodcastInfo(result);
       // Update the count of processed episodes
       setProcessedEpisodeCount(result?.data?.length || 0);
@@ -320,12 +334,34 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   };
 
   // Convert files to screenshot format for new UI
-  const screenshots = files.map((file, index) => ({
-    file,
-    preview: previews[index],
-    // Only show ghost loading for new episodes being added (index >= processedEpisodeCount) and only during initial processing (not transcript generation)
-    shouldShowGhostLoading: isProcessing && !isGettingTranscript && index >= processedEpisodeCount,
-    podcastInfo: podcastInfo?.data?.[index] ? {
+  const screenshots = files.map((file, index) => {
+    const hasData = !!podcastInfo?.data?.[index];
+    const dataItem = podcastInfo?.data?.[index];
+    
+    if (hasData) {
+      console.log(`📱 Debug: Screenshot ${index} has data:`, {
+        index,
+        hasValidation: !!dataItem.validation,
+        validated: dataItem.validation?.validated,
+        episodeTitle: dataItem.episodeTitle || dataItem.validation?.validatedEpisode?.title || dataItem.secondPass?.episodeTitle || dataItem.firstPass?.episodeTitle,
+        podcastTitle: dataItem.podcastTitle || dataItem.validation?.validatedPodcast?.title || dataItem.secondPass?.podcastTitle || dataItem.firstPass?.podcastTitle,
+        timestamp: dataItem.timestamp || dataItem.secondPass?.timestamp || dataItem.firstPass?.timestamp
+      });
+    } else {
+      console.log(`📱 Debug: Screenshot ${index} has NO data:`, {
+        index,
+        hasPodcastInfo: !!podcastInfo,
+        dataLength: podcastInfo?.data?.length || 0,
+        podcastInfoKeys: podcastInfo ? Object.keys(podcastInfo) : []
+      });
+    }
+    
+    return {
+      file,
+      preview: previews[index],
+      // Only show ghost loading for new episodes being added (index >= processedEpisodeCount) and only during initial processing (not transcript generation)
+      shouldShowGhostLoading: isProcessing && !isGettingTranscript && index >= processedEpisodeCount,
+      podcastInfo: hasData ? {
       episodeTitle: podcastInfo.data[index].episodeTitle ||
                    podcastInfo.data[index].validation?.validatedEpisode?.title || 
                    podcastInfo.data[index].secondPass?.episodeTitle || 
@@ -346,7 +382,8 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
       timestamp: '0:00',
       podcastArtwork: null
     }
-  }));
+    };
+  });
 
   // Debug: Log the extracted episode titles and artwork
   if (podcastInfo?.data) {
