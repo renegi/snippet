@@ -4,17 +4,37 @@ const logger = require('../utils/logger');
 const applePodcastsService = require('./applePodcastsService');
 const { getGoogleClientConfig } = require('../utils/googleCredentials');
 
+// Width (px) of the screenshots the pixel thresholds below were tuned on (iPhone 12-14)
+const REFERENCE_WIDTH = 1170;
+
+// Scales annotation coordinates and image dimensions so the image is REFERENCE_WIDTH wide.
+// A no-op for images that already are; without dimensions, returns the input unchanged.
+function normalizeToReferenceWidth(textAnnotations, imageDimensions) {
+  if (!imageDimensions?.width || imageDimensions.width === REFERENCE_WIDTH) {
+    return { textAnnotations, imageDimensions };
+  }
+
+  const scale = REFERENCE_WIDTH / imageDimensions.width;
+  const scaleVertex = v => ({ ...v, x: (v.x || 0) * scale, y: (v.y || 0) * scale });
+
+  return {
+    textAnnotations: textAnnotations.map(annotation => ({
+      ...annotation,
+      boundingPoly: annotation.boundingPoly && {
+        ...annotation.boundingPoly,
+        vertices: (annotation.boundingPoly.vertices || []).map(scaleVertex)
+      }
+    })),
+    imageDimensions: {
+      width: REFERENCE_WIDTH,
+      height: imageDimensions.height * scale
+    }
+  };
+}
+
 class VisionService {
   constructor() {
-    let clientConfig;
-    try {
-      clientConfig = getGoogleClientConfig();
-    } catch (error) {
-      console.error('Error loading Google Cloud credentials:', error);
-      throw error;
-    }
-    
-    this.client = new vision.ImageAnnotatorClient(clientConfig);
+    this._client = null;
     
     // Configuration thresholds
     this.config = {
@@ -25,6 +45,25 @@ class VisionService {
       validationConfidenceThreshold: 0.7,
       fallbackConfidenceThreshold: 0.6,
       maxCandidatesForValidation: 8
+    };
+  }
+
+  // Created on first use so the OCR logic can be loaded (e.g. in tests) without credentials
+  get client() {
+    if (!this._client) {
+      this._client = new vision.ImageAnnotatorClient(getGoogleClientConfig());
+    }
+    return this._client;
+  }
+
+  // Finds title candidates and the playback timestamp in Vision text annotations.
+  // Geometry is first normalized to REFERENCE_WIDTH, because the filtering rules
+  // use absolute pixel sizes tuned on screenshots of that width.
+  analyzeAnnotations(textAnnotations, imageDimensions) {
+    const normalized = normalizeToReferenceWidth(textAnnotations, imageDimensions);
+    return {
+      candidates: this.extractTextCandidates(normalized.textAnnotations, normalized.imageDimensions),
+      timestamp: this.extractTimestamp(normalized.textAnnotations, normalized.imageDimensions)
     };
   }
 
@@ -70,8 +109,7 @@ class VisionService {
       logger.info('OCR Full Text:', fullText);
       
       // Extract structured information with image dimensions
-      const candidates = this.extractTextCandidates(detections, imageDimensions);
-      const timestamp = this.extractTimestamp(detections, imageDimensions);
+      const { candidates, timestamp } = this.analyzeAnnotations(detections, imageDimensions);
       logger.info(`⏰ Mobile Debug: extractText - Timestamp extracted: ${timestamp}`);
       
       logger.info(`Found ${candidates.length} text candidates`);
@@ -1746,10 +1784,21 @@ class VisionService {
       logger.info(`⏰ Mobile Debug: extractTimestamp - Final candidate ${index}: "${candidate.time}" (Y: ${candidate.y})`);
     });
     
-    // Sort by Y position (prefer timestamps lower on screen in content area)
-    podcastTimestamps.sort((a, b) => b.y - a.y);
+    // Players show elapsed time on the same row as the remaining time ("15:14 ... -15:36").
+    // Prefer timestamps on such a row, so times elsewhere (e.g. "4:30" in a lower
+    // notification) aren't picked just for being lower on screen.
+    const remainingTimeYs = individualTexts
+      .filter(t => /^[-−–]\d{1,2}(:\d{2}){0,2}$/.test(t.description))
+      .map(t => t.boundingPoly.vertices[0].y);
+    const onPlayerRow = podcastTimestamps.filter(candidate =>
+      remainingTimeYs.some(y => Math.abs(y - candidate.y) < this.config.lineTolerance)
+    );
+    const preferredTimestamps = onPlayerRow.length > 0 ? onPlayerRow : podcastTimestamps;
     
-    const result = podcastTimestamps.length > 0 ? podcastTimestamps[0].time : null;
+    // Sort by Y position (prefer timestamps lower on screen in content area)
+    preferredTimestamps.sort((a, b) => b.y - a.y);
+    
+    const result = preferredTimestamps.length > 0 ? preferredTimestamps[0].time : null;
     logger.info(`⏰ Mobile Debug: extractTimestamp - Final result: ${result}`);
     return result;
     } catch (error) {
@@ -1829,4 +1878,5 @@ class VisionService {
   }
 }
 
-module.exports = new VisionService(); 
+module.exports = new VisionService();
+module.exports.normalizeToReferenceWidth = normalizeToReferenceWidth; 
