@@ -1,7 +1,7 @@
 // Records Google Vision OCR responses for the test screenshots so tests can run
 // offline without credentials or API costs.
 //
-// Usage (from snippet/server, with Google credentials in .env):
+// Usage (from server, with Google credentials in .env):
 //   npm run capture-fixtures            # capture screenshots that have no recording yet
 //   npm run capture-fixtures -- --force # re-capture everything
 //

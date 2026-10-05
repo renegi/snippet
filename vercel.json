@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm ci --prefix snippet/server --omit=dev && npm ci --prefix snippet/client",
-  "buildCommand": "npm run build --prefix snippet/client",
-  "outputDirectory": "snippet/client/build",
+  "installCommand": "npm ci --prefix server --omit=dev && npm ci --prefix client",
+  "buildCommand": "npm run build --prefix client",
+  "outputDirectory": "client/build",
   "functions": {
     "api/index.js": {
       "maxDuration": 300
