@@ -93,13 +93,16 @@ class VisionService {
       const imageDimensions = await this.getImageDimensions(image);
       logger.debug('Image dimensions:', imageDimensions);
       
+      // Started before the timer below: getting the client throws synchronously when
+      // credentials are missing, and a timer created first would never be cleared
+      const visionCall = this.client.textDetection(image);
+
       // Add timeout for large mobile images
       let timeoutId;
       const timeout = new Promise((_, reject) => {
         timeoutId = setTimeout(() => reject(new Error('Vision API timeout - image too large or processing taking too long')), 30000);
       });
-      
-      const visionCall = this.client.textDetection(image);
+
       const [result] = await Promise.race([visionCall, timeout]).finally(() => clearTimeout(timeoutId));
       
       logger.debug('Vision API call completed successfully');
