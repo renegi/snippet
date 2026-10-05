@@ -1157,28 +1157,29 @@ const TranscriptHighlighting = ({
   }, [currentEpisodeIndex]);
 
   return (
-    <div className={`w-full max-w-[393px] bg-[#f6f3ee] h-[678px] overflow-hidden shrink-0 flex flex-col items-center justify-start box-border gap-0 text-left text-sm text-[#1b1b1b] font-['Termina'] relative ${className}`}>
+    <div className={`w-full max-w-[393px] bg-[#f6f3ee] h-full overflow-hidden shrink-0 flex flex-col items-center justify-start box-border gap-0 text-left text-sm text-[#1b1b1b] font-['Termina'] relative ${className}`}>
       
       {/* Header with episode info */}
-      <div className="w-full bg-[#f6f3ee] flex flex-row items-center justify-between pt-2 px-4 pb-4 relative shrink-0">
+      <div className="w-full bg-[#f6f3ee] flex flex-row items-center justify-between pt-2 pb-4 relative shrink-0">
         {/* Edge-to-edge divider line */}
         <div className="absolute bottom-0 left-0 right-0 h-px bg-[#dddad1]"></div>
         {/* Episode navigation - left arrow */}
         {episodes.length > 1 && prevEpisode ? (
           <button
             onClick={() => changeEpisode(currentEpisodeIndex - 1)}
-            className="w-8 h-8 flex items-center justify-center rounded-full transition-colors self-center"
+            aria-label="Previous episode"
+            className="w-8 h-8 -ml-1.5 shrink-0 flex items-center justify-start rounded-full transition-colors self-center"
           >
             <svg width="20" height="20" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M10 12L6 8L10 4" stroke="#1b1b1b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
         ) : (
-          <div className="w-8 h-8"></div>
+          <div className="w-8 h-8 -ml-1.5 shrink-0"></div>
         )}
 
         {/* Current episode info - centered */}
-        <div className="flex-1 flex flex-row items-center justify-center gap-2 mx-4">
+        <div className="flex-1 min-w-0 flex flex-row items-center justify-center gap-2 mx-2">
           <img
             className="h-10 w-10 relative rounded-xl overflow-hidden shrink-0 object-cover"
             alt="Podcast artwork"
@@ -1207,14 +1208,15 @@ const TranscriptHighlighting = ({
         {episodes.length > 1 && nextEpisode ? (
           <button
             onClick={() => changeEpisode(currentEpisodeIndex + 1)}
-            className="w-8 h-8 flex items-center justify-center rounded-full transition-colors self-center"
+            aria-label="Next episode"
+            className="w-8 h-8 -mr-1.5 shrink-0 flex items-center justify-end rounded-full transition-colors self-center"
           >
             <svg width="20" height="20" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M6 4L10 8L6 12" stroke="#1b1b1b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
         ) : (
-          <div className="w-8 h-8"></div>
+          <div className="w-8 h-8 -mr-1.5 shrink-0"></div>
         )}
 
         {/* Episode indicator dots */}
@@ -1234,7 +1236,7 @@ const TranscriptHighlighting = ({
 
       {/* Transcript content */}
       <div 
-        className="self-stretch flex-1 bg-[#f6f3ee] overflow-y-auto flex flex-col items-start justify-start pt-4 px-4 pb-0 relative text-lg font-['EB_Garamond']"
+        className="self-stretch flex-1 min-h-0 bg-[#f6f3ee] overflow-y-auto flex flex-col items-start justify-start pt-4 px-4 pb-0 relative text-lg font-['EB_Garamond']"
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -1285,12 +1287,14 @@ const TranscriptHighlighting = ({
       <div className="self-stretch bg-[#f6f3ee] overflow-hidden flex flex-row items-center justify-start pt-4 px-4 pb-6 gap-4 shrink-0 relative">
         {/* Edge-to-edge divider line */}
         <div className="absolute top-0 left-0 right-0 h-px bg-[#dddad1]"></div>
-        <button
-          onClick={onDone}
-          className="h-16 rounded-[24px] bg-[#dddad1] transition-colors overflow-hidden flex flex-row items-center justify-center py-[18px] px-6 box-border text-left text-base text-[#1b1b1b] font-['Termina']"
-        >
-          <b className="relative leading-[125%]">Done</b>
-        </button>
+        {!isCopied && (
+          <button
+            onClick={onDone}
+            className="h-16 rounded-[24px] bg-[#dddad1] transition-colors overflow-hidden flex flex-row items-center justify-center py-[18px] px-6 box-border text-left text-base text-[#1b1b1b] font-['Termina']"
+          >
+            <b className="relative leading-[125%]">Done</b>
+          </button>
+        )}
         
         <PrimaryButtonL
           onClick={handleCopySnippets}
