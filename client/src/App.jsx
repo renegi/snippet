@@ -36,7 +36,7 @@ function App() {
     <div className="app-shell bg-[#f6f3ee]">
       {!showProcessor ? (
         <>
-          <HomeScreen onSelectScreenshots={handleSelectScreenshots} />
+          <HomeScreen onSelectScreenshots={handleSelectScreenshots} onFilesSelected={handleFilesSelected} />
           {/* Hidden file input for home screen */}
           <input
             type="file"

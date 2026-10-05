@@ -5,6 +5,7 @@ import TranscriptHighlighting from "./TranscriptHighlighting";
 const TimeRangeSelection = ({
   screenshots,
   onAddScreenshots,
+  onPasteScreenshots,
   onGenerateTranscript,
   onScreenshotClick,
   isProcessing = false
@@ -160,6 +161,7 @@ const TimeRangeSelection = ({
       <MainContent 
         screenshots={screenshots}
         onAddScreenshots={onAddScreenshots}
+        onPasteScreenshots={onPasteScreenshots}
         onGenerateTranscript={handleGenerateTranscript}
         onScreenshotClick={onScreenshotClick}
         isProcessing={localIsProcessing || isProcessing}

@@ -73,14 +73,18 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   }, [initialFiles]);
 
   const handleFileChange = (event) => {
-    
-    const selectedFiles = Array.from(event.target.files || []);
-    
+    addFiles(Array.from(event.target.files || []));
+
+    // Clear the file input so the same file can be selected again if needed
+    event.target.value = '';
+  };
+
+  // Adds selected or pasted screenshots to the list and extracts their podcast info
+  const addFiles = (selectedFiles) => {
     if (selectedFiles.length === 0) {
       return;
     }
-    
-    
+
     // Track the number of episodes that were already processed before adding new ones
     const previousEpisodeCount = files.length;
     
@@ -108,9 +112,6 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     if (selectedFiles.length > 0) {
       processFiles(selectedFiles);
     }
-    
-    // Clear the file input so the same file can be selected again if needed
-    event.target.value = '';
   };
 
   // Extracts podcast info for newly added files and appends it to the existing results
@@ -429,10 +430,11 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
 
   // Always show the new UI
   return (
-    <div className="w-full max-w-[393px] h-full mx-auto px-4">
+    <div className="w-full max-w-[393px] h-full mx-auto">
       <TimeRangeSelection
         screenshots={screenshots}
         onAddScreenshots={handleAddScreenshots}
+        onPasteScreenshots={addFiles}
         onGenerateTranscript={handleGenerateTranscript}
         onScreenshotClick={handleScreenshotClick}
         isProcessing={isProcessing}

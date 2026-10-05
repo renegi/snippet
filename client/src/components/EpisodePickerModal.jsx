@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { XMarkIcon, CheckIcon } from '@heroicons/react/24/outline';
-import PrimaryButtonL from './PrimaryButtonL';
+import Button from './Button';
 
 const formatDate = (releaseDate) => {
   if (!releaseDate) return '';
@@ -63,7 +63,7 @@ const EpisodePickerModal = ({
       <div className="fixed inset-0 z-50 flex items-end justify-center">
         <div className="w-full h-[90vh] bg-[#F6F4EE] rounded-t-[24px] shadow-xl transform transition-all duration-300 ease-out flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-[#DDDAD1]">
+          <div className="flex items-center justify-between px-4 py-6 border-b border-[#DDDAD1]">
             <h2 className="text-xl font-semibold text-[#1B1B1B] font-['Termina']">Which episode is this?</h2>
             <button
               onClick={onClose}
@@ -75,7 +75,7 @@ const EpisodePickerModal = ({
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
             {/* Screenshot, large enough to read the title on it */}
             {screenshotData?.preview && (
               <div className="flex justify-center">
@@ -154,21 +154,18 @@ const EpisodePickerModal = ({
           </div>
 
           {/* Floating Footer */}
-          <div className="bg-[#F6F4EE] border-t border-[#DDDAD1] p-6 flex gap-4">
-            <button
-              onClick={onSearchManually}
-              className="flex-1 h-16 rounded-[24px] bg-[#DDDAD1] transition-colors overflow-hidden flex flex-row items-center justify-center py-[18px] px-3 box-border text-center text-base text-[#1B1B1B] font-['Termina']"
-            >
-              <b className="relative leading-[130%] whitespace-nowrap">None of these</b>
-            </button>
+          <div className="bg-[#F6F4EE] border-t border-[#DDDAD1] px-4 py-6 flex gap-4">
+            <Button variant="secondary" onClick={onSearchManually} className="flex-1">
+              None of these
+            </Button>
 
-            <PrimaryButtonL
+            <Button
               onClick={handleConfirm}
               disabled={selectedIndex === null}
-              className="flex-1"
+              className="flex-1 max-w-[361px]"
             >
               Confirm
-            </PrimaryButtonL>
+            </Button>
           </div>
         </div>
       </div>
