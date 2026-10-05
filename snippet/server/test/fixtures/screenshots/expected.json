@@ -1,0 +1,38 @@
+{
+  "_note": "Expected results per screenshot. Fill in the full titles for truncated episodes (marked confirmed: false).",
+  "big-picture-science.jpg": {
+    "player": "Apple Podcasts (full screen)",
+    "podcast": "Big Picture Science",
+    "episode": "What Moves Us",
+    "timestamp": "16:00",
+    "confirmed": false
+  },
+  "football-weekly-lockscreen.jpg": {
+    "player": "Lock screen",
+    "podcast": "Football Weekly",
+    "episode": "…he Club World Cup, U21 glo… (truncated on screen)",
+    "timestamp": "15:22",
+    "confirmed": false
+  },
+  "where-should-we-begin-promo-card.jpg": {
+    "player": "Apple Podcasts (full screen, promo card below title)",
+    "podcast": "Where Should We Begin? with Esther Perel",
+    "episode": "Esther Calling - Never Bee… (truncated on screen)",
+    "timestamp": "26:53",
+    "confirmed": false
+  },
+  "search-engine-lockscreen.jpg": {
+    "player": "Lock screen",
+    "podcast": "Search Engine",
+    "episode": "The Psychic Question",
+    "timestamp": "9:23",
+    "confirmed": false
+  },
+  "marketplace-lockscreen.jpg": {
+    "player": "Lock screen",
+    "podcast": "Marketplace",
+    "episode": "…ading the labor market tea l… (truncated on screen)",
+    "timestamp": "15:14",
+    "confirmed": false
+  }
+}
