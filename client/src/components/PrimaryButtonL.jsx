@@ -8,7 +8,6 @@ const PrimaryButtonL = ({
   disabled = false
 }) => {
   const handleClick = (e) => {
-    console.log('PrimaryButtonL clicked!', { disabled, onClick: typeof onClick });
     if (!disabled && onClick) {
       onClick(e);
     }

@@ -36,17 +36,6 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedScreenshotIndex, setSelectedScreenshotIndex] = useState(null);
 
-  // Debug: Log when podcastInfo changes
-  useEffect(() => {
-    console.log('🔄 podcastInfo state changed:', {
-      hasPodcastInfo: !!podcastInfo,
-      success: podcastInfo?.success,
-      dataLength: podcastInfo?.data?.length || 0,
-      hasData: !!podcastInfo?.data,
-      podcastInfoKeys: podcastInfo ? Object.keys(podcastInfo) : [],
-      firstItem: podcastInfo?.data?.[0] ? 'exists' : 'missing'
-    });
-  }, [podcastInfo]);
 
   // Process initial files when component mounts
   const hasProcessedInitialFiles = useRef(false);
@@ -68,19 +57,13 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   }, [initialFiles]);
 
   const handleFileChange = (event) => {
-    console.log('📱 Mobile Debug: File input changed', {
-      filesCount: event.target.files?.length || 0,
-      isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-    });
     
     const selectedFiles = Array.from(event.target.files || []);
     
     if (selectedFiles.length === 0) {
-      console.log('📱 Mobile Debug: No files selected');
       return;
     }
     
-    console.log('📱 Mobile Debug: Selected files:', selectedFiles.map(f => ({ name: f.name, size: f.size, type: f.type })));
     
     // Track the number of episodes that were already processed before adding new ones
     const previousEpisodeCount = files.length;
@@ -154,10 +137,8 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   };
 
   const handleAddScreenshots = () => {
-    console.log('📱 Mobile Debug: Add screenshots button clicked');
     
     if (fileInputRef.current) {
-      console.log('📱 Mobile Debug: Triggering file input click');
       
       // Add a small delay for mobile browsers
       setTimeout(() => {
@@ -173,7 +154,6 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   const handleGenerateTranscript = async (selectedTimeRange) => {
     if (!podcastInfo || !Array.isArray(podcastInfo.data)) return null;
 
-    console.log(`🎯 Starting transcript generation for ${podcastInfo.data.length} episodes`);
 
     // Convert time range to the format expected by the API
     const convertedTimeRange = {
@@ -244,7 +224,6 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
       }
     });
     
-    console.log(`🎉 Transcript generation complete. Generated ${episodes.length} episodes out of ${podcastInfo.data.length} total`);
     
     // Return all episodes if we have any, otherwise return null
     if (failures.length > 0) {
@@ -258,15 +237,6 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   };
 
   const handleGetTranscript = async (info, index, customTimeRange = null) => {
-    console.log(`🔍 Debug: Processing episode ${index}:`, {
-      hasValidatedPodcastId: !!info.validation?.validatedPodcast?.id,
-      hasValidatedEpisodeTitle: !!info.validation?.validatedEpisode?.title,
-      hasSecondPassTimestamp: !!info.secondPass?.timestamp,
-      hasFirstPassTimestamp: !!info.firstPass?.timestamp,
-      validationValidated: info.validation?.validated,
-      secondPassEpisodeTitle: info.secondPass?.episodeTitle,
-      firstPassEpisodeTitle: info.firstPass?.episodeTitle
-    });
 
     // More lenient validation - require at least basic episode info
     const hasBasicInfo = (
@@ -284,7 +254,6 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
       return null;
     }
 
-    console.log(`✅ Episode ${index} has required info, proceeding with transcript generation`);
 
     try {
       const transcriptResult = await getTranscript(info, customTimeRange || timeRange);
@@ -306,38 +275,6 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   // Convert files to screenshot format for new UI
   const screenshots = files.map((file, index) => {
     const hasData = !!podcastInfo?.data?.[index];
-    const dataItem = podcastInfo?.data?.[index];
-    
-    if (hasData) {
-      const extractedEpisodeTitle = dataItem.episodeTitle || 
-                                   dataItem.validation?.validatedEpisode?.title || 
-                                   dataItem.secondPass?.episodeTitle || 
-                                   dataItem.firstPass?.episodeTitle ||
-                                   `Episode ${index + 1}`;
-      
-      console.log(`📱 Debug: Screenshot ${index} has data:`, {
-        index,
-        hasValidation: !!dataItem.validation,
-        validated: dataItem.validation?.validated,
-        episodeTitle: extractedEpisodeTitle,
-        podcastTitle: dataItem.podcastTitle || dataItem.validation?.validatedPodcast?.title || dataItem.secondPass?.podcastTitle || dataItem.firstPass?.podcastTitle,
-        timestamp: dataItem.timestamp || dataItem.secondPass?.timestamp || dataItem.firstPass?.timestamp,
-        // Show all possible sources
-        rawEpisodeTitle: dataItem.episodeTitle,
-        validatedEpisodeTitle: dataItem.validation?.validatedEpisode?.title,
-        secondPassEpisodeTitle: dataItem.secondPass?.episodeTitle,
-        firstPassEpisodeTitle: dataItem.firstPass?.episodeTitle,
-        // Show full data structure
-        fullDataItem: dataItem
-      });
-    } else {
-      console.log(`📱 Debug: Screenshot ${index} has NO data:`, {
-        index,
-        hasPodcastInfo: !!podcastInfo,
-        dataLength: podcastInfo?.data?.length || 0,
-        podcastInfoKeys: podcastInfo ? Object.keys(podcastInfo) : []
-      });
-    }
     
     return {
       file,
@@ -378,13 +315,6 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
                             dataItem.validation?.validatedEpisode?.artwork ||
                             dataItem.validation?.validatedEpisode?.image;
         
-        console.log(`✅ Final values for Screenshot ${index}:`, {
-          episodeTitle: finalEpisodeTitle,
-          timestamp: finalTimestamp,
-          artwork: finalArtwork || 'null',
-          hasError,
-          hasAnyData
-        });
         
         return {
           episodeTitle: finalEpisodeTitle,
@@ -400,60 +330,19 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     };
   });
 
-  // Debug: Log the extracted episode titles and artwork
-  if (podcastInfo?.data) {
-    console.log('Debug - Episode data extracted:', 
-      podcastInfo.data.map((info, index) => ({
-        index,
-        validatedTitle: info.validation?.validatedEpisode?.title,
-        secondPassTitle: info.secondPass?.episodeTitle,
-        firstPassTitle: info.firstPass?.episodeTitle,
-        finalTitle: screenshots[index]?.podcastInfo?.episodeTitle,
-        podcastArtwork: info.validation?.validatedPodcast?.artworkUrl,
-        episodeArtwork: info.validation?.validatedEpisode?.artworkUrl,
-        finalArtwork: screenshots[index]?.podcastInfo?.podcastArtwork
-      }))
-    );
-    
-    // More detailed logging
-    podcastInfo.data.forEach((info, index) => {
-      const screenshot = screenshots[index];
-      console.log(`🔍 Detailed Debug for Screenshot ${index}:`, {
-        'Raw episodeTitle': info.episodeTitle,
-        'Validated episode title': info.validation?.validatedEpisode?.title,
-        'Second pass title': info.secondPass?.episodeTitle,
-        'First pass title': info.firstPass?.episodeTitle,
-        'Final displayed title': screenshot?.podcastInfo?.episodeTitle,
-        'Has validation': !!info.validation,
-        'Validation validated': info.validation?.validated,
-        'Has validated podcast': !!info.validation?.validatedPodcast,
-        'Has validated episode': !!info.validation?.validatedEpisode,
-        'Podcast title': info.podcastTitle || info.validation?.validatedPodcast?.title,
-        'Timestamp': info.timestamp || info.secondPass?.timestamp || info.firstPass?.timestamp,
-        'Artwork URL': screenshot?.podcastInfo?.podcastArtwork
-      });
-    });
-  }
-
   // Modal handlers
   const handleScreenshotClick = (index) => {
-    console.log('handleScreenshotClick called with index:', index);
     setSelectedScreenshotIndex(index);
     setIsEditModalOpen(true);
-    console.log('Modal state set to open');
   };
 
   const handleModalUpdate = (updatedData) => {
-    console.log('handleModalUpdate called with:', updatedData);
-    console.log('selectedScreenshotIndex:', selectedScreenshotIndex);
-    console.log('podcastInfo:', podcastInfo);
     
     // Update the podcast info with the new data
     if (selectedScreenshotIndex !== null && podcastInfo?.data) {
       const updatedPodcastInfo = { ...podcastInfo };
       const screenshotData = updatedPodcastInfo.data[selectedScreenshotIndex];
       
-      console.log('Original screenshot data:', screenshotData);
       
       // Update the validation data
       if (updatedData.podcast) {
@@ -467,7 +356,6 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
         };
         // Also update root level for UI consistency
         screenshotData.podcastTitle = updatedData.podcast.title;
-        console.log('Updated podcast:', updatedData.podcast.title);
       }
       
       if (updatedData.episode) {
@@ -481,7 +369,6 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
         };
         // Also update root level for UI consistency
         screenshotData.episodeTitle = updatedData.episode.title;
-        console.log('Updated episode:', updatedData.episode.title);
       }
       
       if (updatedData.timestamp) {
@@ -491,14 +378,9 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
         };
         // Also update root level for UI consistency
         screenshotData.timestamp = updatedData.timestamp;
-        console.log('Updated timestamp:', updatedData.timestamp);
       }
       
-      console.log('Updated screenshot data:', screenshotData);
       setPodcastInfo(updatedPodcastInfo);
-      console.log('PodcastInfo state updated');
-    } else {
-      console.log('Cannot update: selectedScreenshotIndex or podcastInfo missing');
     }
   };
 

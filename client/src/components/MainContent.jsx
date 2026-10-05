@@ -202,13 +202,8 @@ const MainContent = ({
   }, [isDragging, dragHandle]);
 
   const handleGenerateTranscript = () => {
-    console.log('Generate transcript button clicked!');
-    console.log('totalSelected:', totalSelected);
-    console.log('selectedRange:', selectedRange);
-    console.log('onGenerateTranscript function:', typeof onGenerateTranscript);
     
     if (onGenerateTranscript) {
-      console.log('Calling onGenerateTranscript with selectedRange:', selectedRange);
       onGenerateTranscript(selectedRange);
     } else {
       console.warn('onGenerateTranscript function is not provided!');
@@ -284,7 +279,6 @@ const MainContent = ({
                 key={index} 
                 className="self-stretch flex flex-row items-center justify-start gap-2 cursor-pointer rounded-lg transition-colors"
                 onClick={() => {
-                  console.log('Screenshot clicked:', index, 'Handler exists:', !!onScreenshotClick);
                   onScreenshotClick && onScreenshotClick(index);
                 }}
               >

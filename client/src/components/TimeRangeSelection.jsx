@@ -128,7 +128,6 @@ const TimeRangeSelection = ({
 
   const handleExportSnippets = () => {
     // Handle export snippets action
-    console.log('Exporting snippets...');
   };
 
   const handleEpisodeChange = (newIndex) => {

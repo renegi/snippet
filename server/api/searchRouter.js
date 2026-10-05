@@ -13,7 +13,7 @@ router.post('/search-podcasts', async (req, res) => {
       return res.json({ podcasts: [] });
     }
 
-    logger.info(`Searching podcasts for term: "${searchTerm}"`);
+    logger.debug(`Searching podcasts for term: "${searchTerm}"`);
     
     const searchResult = await applePodcastsService.searchMultiplePodcasts(searchTerm);
     
@@ -33,7 +33,7 @@ router.post('/search-episodes', async (req, res) => {
       return res.json({ episodes: [] });
     }
 
-    logger.info(`Searching episodes for podcast ${podcastId} with term: "${searchTerm}"`);
+    logger.debug(`Searching episodes for podcast ${podcastId} with term: "${searchTerm}"`);
     
     // Use the new searchMultipleEpisodes method
     const searchResult = await applePodcastsService.searchMultipleEpisodes(podcastId, searchTerm);

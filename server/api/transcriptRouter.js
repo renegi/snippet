@@ -61,7 +61,7 @@ router.post('/', async (req, res) => {
     // Step 3: Generate transcript using AssemblyAI
     let transcriptResult;
     try {
-      logger.info('Calling AssemblyAI for transcript generation...');
+      logger.debug('Calling AssemblyAI for transcript generation...');
       transcriptResult = await assemblyService.getTranscript(audioUrl, timestamp, timeRange);
       logger.info('AssemblyAI transcript generation successful');
     } catch (error) {

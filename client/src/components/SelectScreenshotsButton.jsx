@@ -7,7 +7,6 @@ const SelectScreenshotsButton = ({
   disabled = false
 }) => {
   const handleClick = (e) => {
-    console.log('SelectScreenshotsButton clicked!', { disabled, onClick: typeof onClick });
     if (!disabled && onClick) {
       onClick(e);
     }

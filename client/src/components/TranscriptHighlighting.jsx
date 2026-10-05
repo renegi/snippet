@@ -863,17 +863,6 @@ const TranscriptHighlighting = ({
       if (!episodeSelectedWords || episodeSelectedWords.size === 0) return;
 
       // Debug: Log episode data structure
-      console.log('Episode data for copying:', {
-        episodeIndex,
-        episodeTitle: episode.episodeTitle,
-        podcastName: episode.podcastName,
-        podcastId: episode.podcastId,
-        episodeId: episode.episodeId,
-        validatedPodcastTitle: episode.validatedPodcast?.title,
-        validatedPodcastId: episode.validatedPodcast?.id,
-        validatedEpisodeId: episode.validatedEpisode?.id,
-        wordsCount: episode.words?.length || 0
-      });
 
       // Get the transcript text and split into words
       const transcript = episode.transcript || '';
@@ -975,7 +964,6 @@ const TranscriptHighlighting = ({
               };
               
               const wordLevelTimerange = `${formatTime(startSeconds)}-${formatTime(endSeconds)}`;
-              console.log('Word-level timestamp success:', wordLevelTimerange);
               timerange = wordLevelTimerange;
             }
           } catch (error) {
@@ -1009,21 +997,16 @@ const TranscriptHighlighting = ({
                   
                   // Add timestamp parameter to the link
                   applePodcastsLink += `&t=${timestampSeconds}`;
-                  console.log(`✅ Added timestamp to Apple Podcasts link: ${timestampSeconds}s (exact timestamp)`);
                 }
               } catch (error) {
                 console.warn('Failed to add timestamp to Apple Podcasts link:', error);
               }
             }
             
-            console.log('✅ Added episode-specific Apple Podcasts link:', applePodcastsLink);
           } else {
             // Fallback to podcast link
             applePodcastsLink = `https://podcasts.apple.com/podcast/id${episode.podcastId}`;
-            console.log('✅ Added podcast Apple Podcasts link (no episode ID):', applePodcastsLink);
           }
-        } else {
-          console.log('❌ No podcast ID available for Apple Podcasts link');
         }
         
         // Format: Apple Podcasts link on third line
@@ -1041,8 +1024,6 @@ const TranscriptHighlighting = ({
 
     // Copy to clipboard if we have any formatted text
     if (allFormattedText) {
-      console.log('Final formatted text:', allFormattedText);
-      console.log('Starting copy process...');
       
       // Try multiple methods to copy to clipboard
       let copySuccess = false;
@@ -1052,7 +1033,6 @@ const TranscriptHighlighting = ({
         try {
           await navigator.clipboard.writeText(allFormattedText);
           copySuccess = true;
-          console.log('✅ Copied using modern clipboard API');
         } catch (err) {
           console.warn('Modern clipboard API failed:', err);
         }
@@ -1077,7 +1057,6 @@ const TranscriptHighlighting = ({
           
           if (successful) {
             copySuccess = true;
-            console.log('✅ Copied using fallback execCommand method');
           }
         } catch (err) {
           console.warn('Fallback copy method failed:', err);
@@ -1092,7 +1071,6 @@ const TranscriptHighlighting = ({
             title: 'Podcast Snippets'
           });
           copySuccess = true;
-          console.log('✅ Shared using Web Share API');
         } catch (err) {
           console.warn('Web Share API failed:', err);
           // If user cancels share, don't treat it as success
@@ -1102,20 +1080,16 @@ const TranscriptHighlighting = ({
         }
       }
       
-      console.log('Copy process completed. Success:', copySuccess);
       
       if (copySuccess) {
-        console.log('Setting isCopied to true...');
         setIsCopied(true);
         
         // Reset the copied state after 2 seconds
         setTimeout(() => {
-          console.log('Resetting isCopied to false...');
           setIsCopied(false);
         }, 2000);
       } else {
         // Show an alert as final fallback
-        console.log('All copy methods failed, showing alert...');
         alert('Copy failed. Here is your text:\n\n' + allFormattedText);
       }
     }
