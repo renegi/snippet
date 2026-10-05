@@ -242,10 +242,10 @@ const MainContent = ({
 
   return (
     <div
-      className={`w-full max-w-[393px] bg-[#f6f3ee] h-[678px] overflow-hidden shrink-0 flex flex-col items-center justify-start pt-4 px-0 pb-0 box-border gap-0 text-left text-2xl text-[#1b1b1b] font-['Termina'] relative ${className}`}
+      className={`w-full max-w-[393px] bg-[#f6f3ee] h-full overflow-hidden shrink-0 flex flex-col items-center justify-start pt-4 px-0 pb-0 box-border gap-0 text-left text-2xl text-[#1b1b1b] font-['Termina'] relative ${className}`}
     >
       {/* Fixed header with title and add button */}
-      <div className="w-full max-w-[361px] px-4 flex flex-row items-center justify-between gap-0 mb-6">
+      <div className="w-full max-w-[361px] px-4 flex flex-row items-center justify-between gap-0 pb-6 shrink-0">
         <b className="relative leading-[130%]">
           {screenshots.length} screenshot{screenshots.length === 1 ? '' : 's'}
         </b>
@@ -263,7 +263,7 @@ const MainContent = ({
       </div>
 
       {/* Scrollable list area */}
-      <div className="w-full max-w-[361px] px-4 flex-1 flex flex-col items-start justify-start overflow-y-auto pb-[240px]">
+      <div className="w-full max-w-[361px] px-4 flex-1 min-h-0 flex flex-col items-start justify-start overflow-y-auto overscroll-contain pb-4">
         <div className="w-full flex flex-col items-start justify-start gap-4 text-sm">
           {screenshots.map((screenshot, index) => {
             // Use the shouldShowGhostLoading flag from the screenshot object
@@ -328,8 +328,8 @@ const MainContent = ({
         </div>
       </div>
       
-      {/* Floating footer with background */}
-      <div className="absolute bottom-0 left-0 right-0 bg-[#f6f3ee] overflow-hidden flex flex-col items-center justify-start pt-3 px-4 pb-4 gap-6">
+      {/* Fixed footer pinned below the list */}
+      <div className="relative w-full shrink-0 bg-[#f6f3ee] overflow-hidden flex flex-col items-center justify-start pt-3 px-4 pb-4 gap-6">
         {/* Edge-to-edge divider line */}
         <div className="absolute top-0 left-0 right-0 h-px bg-[#dddad1]"></div>
         <div className="w-full max-w-[361px] flex flex-col items-start justify-start gap-4">
