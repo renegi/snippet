@@ -3,18 +3,26 @@ const logger = require('../utils/logger');
 
 class AssemblyService {
   constructor() {
-    this.apiKey = process.env.ASSEMBLYAI_API_KEY;
-    if (!this.apiKey) {
-      throw new Error('ASSEMBLYAI_API_KEY environment variable is required');
-    }
     this.baseUrl = 'https://api.assemblyai.com/v2';
-    this.client = axios.create({
-      baseURL: this.baseUrl,
-      headers: {
-        'authorization': this.apiKey,
-        'content-type': 'application/json'
+    this._client = null;
+  }
+
+  // Created on first use so a missing key only breaks transcripts, not the whole server
+  get client() {
+    if (!this._client) {
+      const apiKey = process.env.ASSEMBLYAI_API_KEY;
+      if (!apiKey) {
+        throw new Error('ASSEMBLYAI_API_KEY environment variable is required');
       }
-    });
+      this._client = axios.create({
+        baseURL: this.baseUrl,
+        headers: {
+          'authorization': apiKey,
+          'content-type': 'application/json'
+        }
+      });
+    }
+    return this._client;
   }
 
   // Convert timestamp string (like "10:30" or "1:25:30") to seconds

@@ -46,106 +46,52 @@ router.post('/', async (req, res) => {
       logger.warn('Failed to get audio URL from RSS feed:', error.message);
     }
 
-    // Step 3: Generate transcript using AssemblyAI
-    if (audioUrl && timestamp) {
-      try {
-        logger.info('Calling AssemblyAI for transcript generation...');
-        const transcriptResult = await assemblyService.getTranscript(audioUrl, timestamp, timeRange);
-        
-        logger.info('AssemblyAI transcript generation successful');
-        
-        return res.json({
-          success: true,
-          transcript: transcriptResult.text,
-          confidence: transcriptResult.confidence,
-          words: transcriptResult.words || [],
-          utterances: transcriptResult.utterances || [],
-          episode: {
-            title: podcastInfo.validatedEpisode?.title,
-            artworkUrl: podcastInfo.validatedEpisode?.artworkUrl || podcastInfo.validatedPodcast?.artworkUrl
-          },
-          timeRange: transcriptResult.calculatedTimeRange || {
-            start: timestamp ? `${timestamp} - ${timeRange.before}s` : '0:00',
-            end: timestamp ? `${timestamp} + ${timeRange.after}s` : '0:45'
-          },
-          podcastId: podcastInfo.validatedPodcast.id,
-          episodeTitle: podcastInfo.validatedEpisode?.title,
-          timestamp,
-          requestedTimeRange: timeRange,
-          audioUrl: audioUrl.substring(0, 100) + '...', // Partial URL for debugging
-          source: 'assemblyai'
-        });
-      } catch (error) {
-        logger.error('AssemblyAI transcript generation failed:', error);
-        // Fall through to mock response
-      }
+    if (!audioUrl) {
+      logger.warn('No audio URL found for episode', { episodeTitle: podcastInfo.validatedEpisode?.title });
+      return res.status(422).json({
+        success: false,
+        error: `Couldn't find the audio file for "${podcastInfo.validatedEpisode?.title || 'this episode'}"`
+      });
     }
 
-    // Fallback: Return enhanced mock transcript with explanation
-    logger.info('Returning mock transcript (audio URL not available or AssemblyAI failed)');
-    
-    const mockReason = !audioUrl ? 'Audio URL not available' : 'AssemblyAI generation failed';
-    
-    res.json({ 
+    if (!timestamp) {
+      return res.status(400).json({ success: false, error: 'Timestamp is required' });
+    }
+
+    // Step 3: Generate transcript using AssemblyAI
+    let transcriptResult;
+    try {
+      logger.info('Calling AssemblyAI for transcript generation...');
+      transcriptResult = await assemblyService.getTranscript(audioUrl, timestamp, timeRange);
+      logger.info('AssemblyAI transcript generation successful');
+    } catch (error) {
+      logger.error('AssemblyAI transcript generation failed:', { error: error.message });
+      return res.status(502).json({
+        success: false,
+        error: `Transcription failed for "${podcastInfo.validatedEpisode?.title || 'this episode'}"`
+      });
+    }
+
+    res.json({
       success: true,
-      transcript: `[MOCK TRANSCRIPT - ${mockReason}]\n\nThis is where the transcript would appear for "${podcastInfo.validatedEpisode?.title || 'Unknown Episode'}" from "${podcastInfo.validatedPodcast.title}" at timestamp ${timestamp}.\n\nThe transcript would cover ${timeRange.before} seconds before to ${timeRange.after} seconds after the selected time.\n\nTo get real transcripts, the system needs:\n1. Access to the podcast's RSS feed\n2. Direct audio file URLs\n3. Working AssemblyAI integration`,
-      confidence: 0.0,
-      words: [],
-      utterances: [],
+      transcript: transcriptResult.text,
+      confidence: transcriptResult.confidence,
+      words: transcriptResult.words || [],
+      utterances: transcriptResult.utterances || [],
       episode: {
         title: podcastInfo.validatedEpisode?.title,
         artworkUrl: podcastInfo.validatedEpisode?.artworkUrl || podcastInfo.validatedPodcast?.artworkUrl
       },
-      timeRange: {
-        start: timestamp ? `${timestamp} - ${timeRange.before}s` : '0:00',
-        end: timestamp ? `${timestamp} + ${timeRange.after}s` : '0:45'
-      },
+      timeRange: transcriptResult.calculatedTimeRange,
       podcastId: podcastInfo.validatedPodcast.id,
       episodeTitle: podcastInfo.validatedEpisode?.title,
       timestamp,
       requestedTimeRange: timeRange,
-      source: 'mock',
-      mockReason
+      source: 'assemblyai'
     });
   } catch (error) {
-    console.error('Transcript generation error:', error);
-    res.status(500).json({ error: 'Failed to generate transcript' });
-  }
-});
-
-// Generate transcript from audio URL
-router.post('/generate', async (req, res) => {
-  try {
-    const { audioUrl, startTime, endTime } = req.body;
-
-    if (!audioUrl) {
-      return res.status(400).json({ error: 'Audio URL is required' });
-    }
-
-    const transcript = await assemblyService.generateTranscript(audioUrl, startTime, endTime);
-    
-    res.json({ 
-      transcript,
-      startTime,
-      endTime,
-      audioUrl
-    });
-  } catch (error) {
-    console.error('Transcript generation error:', error);
-    res.status(500).json({ error: 'Failed to generate transcript' });
-  }
-});
-
-// Get transcript status
-router.get('/status/:transcriptId', async (req, res) => {
-  try {
-    const { transcriptId } = req.params;
-    const status = await assemblyService.getTranscriptStatus(transcriptId);
-    
-    res.json({ status });
-  } catch (error) {
-    console.error('Transcript status error:', error);
-    res.status(500).json({ error: 'Failed to get transcript status' });
+    logger.error('Transcript generation error:', { error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to generate transcript' });
   }
 });
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { XMarkIcon, TrashIcon } from '@heroicons/react/24/outline';
 import PrimaryButtonL from './PrimaryButtonL';
+import { API_BASE_URL } from '../services/api';
 
 const ScreenshotEditModal = ({ 
   isOpen, 
@@ -72,7 +73,7 @@ const ScreenshotEditModal = ({
     podcastSearchTimeoutRef.current = setTimeout(async () => {
       setIsLoadingPodcasts(true);
       try {
-        const response = await fetch('/api/search-podcasts', {
+        const response = await fetch(`${API_BASE_URL}/search-podcasts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ searchTerm: podcastSearchTerm })
@@ -120,7 +121,7 @@ const ScreenshotEditModal = ({
     episodeSearchTimeoutRef.current = setTimeout(async () => {
       setIsLoadingEpisodes(true);
       try {
-        const response = await fetch('/api/search-episodes', {
+        const response = await fetch(`${API_BASE_URL}/search-episodes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 

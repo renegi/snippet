@@ -1,7 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import TimeRangeSelection from './TimeRangeSelection';
 import ScreenshotEditModal from './ScreenshotEditModal';
-import { processScreenshots, getTranscript } from '../services/api';
+import { processScreenshot, getTranscript } from '../services/api';
+
+// How many screenshots to send at once (each one triggers several Apple Podcasts lookups)
+const UPLOAD_CONCURRENCY = 2;
+
+// Runs `fn` over `items` with at most `limit` in flight, preserving order
+const mapWithConcurrency = async (items, limit, fn) => {
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+};
 
 function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   const [files, setFiles] = useState([]);
@@ -10,7 +27,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   const [isGettingTranscript, setIsGettingTranscript] = useState(false);
   const [podcastInfo, setPodcastInfo] = useState(null);
   const [transcripts, setTranscripts] = useState({});
-  const [timeRange, setTimeRange] = useState({
+  const [timeRange] = useState({
     before: 30,
     after: 15
   });
@@ -32,8 +49,10 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   }, [podcastInfo]);
 
   // Process initial files when component mounts
+  const hasProcessedInitialFiles = useRef(false);
   useEffect(() => {
-    if (initialFiles.length > 0) {
+    if (initialFiles.length > 0 && !hasProcessedInitialFiles.current) {
+      hasProcessedInitialFiles.current = true;
       setFiles(initialFiles);
       
       // Create preview URLs
@@ -86,150 +105,49 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     // Update the processed episode count to reflect what was already processed
     setProcessedEpisodeCount(previousEpisodeCount);
     
-    // Automatically process all files (existing + new) after selection
+    // Automatically process the new files; earlier results (and any edits to them) are kept
     if (selectedFiles.length > 0) {
-      console.log('📱 Mobile Debug: Processing files...');
-      processFiles(updatedFiles);
+      processFiles(selectedFiles);
     }
     
     // Clear the file input so the same file can be selected again if needed
     event.target.value = '';
   };
 
-  const processFiles = async (filesToProcess) => {
+  // Extracts podcast info for newly added files and appends it to the existing results
+  const processFiles = async (newFiles) => {
     setIsProcessing(true);
-    
-    console.log('📱 Mobile Debug: Starting file processing', {
-      fileCount: filesToProcess.length,
-      totalSize: filesToProcess.reduce((sum, file) => sum + file.size, 0),
-      files: filesToProcess.map(f => ({ 
-        name: f.name, 
-        size: f.size, 
-        type: f.type,
-        sizeInMB: (f.size / 1024 / 1024).toFixed(2) + 'MB'
-      })),
-      isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-    });
-    
+    const requestErrors = [];
+
     try {
-      const formData = new FormData();
-      filesToProcess.forEach((file, index) => {
-        console.log(`📱 Mobile Debug: Adding file ${index + 1} to FormData:`, {
-          name: file.name,
-          size: file.size,
-          type: file.type
-        });
-        formData.append('screenshots', file);
+      const results = await mapWithConcurrency(newFiles, UPLOAD_CONCURRENCY, async (file) => {
+        try {
+          const result = await processScreenshot(file);
+          return result.data?.[0] || { error: true, message: `No result for ${file.name}` };
+        } catch (error) {
+          console.error(`Error processing ${file.name}:`, error);
+          requestErrors.push(error.message);
+          return {
+            error: true,
+            message: `Failed to process ${file.name}: ${error.message}`,
+            firstPass: { error: true },
+            secondPass: { error: true }
+          };
+        }
       });
-      formData.append('timeRange', JSON.stringify(timeRange));
 
-      console.log('📱 Mobile Debug: Sending request to server...');
-      const startTime = Date.now();
-
-      const result = await processScreenshots(formData);
-      
-      const endTime = Date.now();
-      console.log('📱 Mobile Debug: Server response received', {
-        processingTime: `${endTime - startTime}ms`,
-        success: result.success,
-        dataLength: result.data?.length || 0,
-        hasError: !!result.error
-      });
-      
-      if (result.success && result.data) {
-        console.log('📱 Mobile Debug: Processing results:', result.data.map((item, index) => ({
-          index,
-          podcastTitle: item.firstPass?.podcastTitle || item.secondPass?.podcastTitle,
-          episodeTitle: item.firstPass?.episodeTitle || item.secondPass?.episodeTitle,
-          timestamp: item.firstPass?.timestamp || item.secondPass?.timestamp,
-          validated: item.validation?.validated,
-          player: item.firstPass?.player || item.secondPass?.player,
-          hasError: !!item.error,
-          errorMessage: item.error || item.message,
-          // Show what's actually in the item
-          itemKeys: Object.keys(item),
-          hasFirstPass: !!item.firstPass,
-          hasSecondPass: !!item.secondPass,
-          hasValidation: !!item.validation
-        })));
-        
-        // Check if extraction failed
-        result.data.forEach((item, index) => {
-          if (item.error || (!item.firstPass && !item.secondPass && !item.validation)) {
-            console.error(`❌ Extraction failed for screenshot ${index}:`, {
-              error: item.error,
-              message: item.message,
-              hasFirstPass: !!item.firstPass,
-              hasSecondPass: !!item.secondPass,
-              hasValidation: !!item.validation,
-              fullItem: item
-            });
-          }
-        });
-      }
-      
-      console.log('📱 Mobile Debug: Setting podcastInfo state:', {
-        success: result.success,
-        dataLength: result.data?.length || 0,
-        hasData: !!result.data,
-        resultKeys: Object.keys(result),
-        resultType: typeof result,
-        isArray: Array.isArray(result),
-        firstItem: result.data?.[0] ? {
-          hasValidation: !!result.data[0].validation,
-          validated: result.data[0].validation?.validated,
-          hasValidatedPodcast: !!result.data[0].validation?.validatedPodcast,
-          hasValidatedEpisode: !!result.data[0].validation?.validatedEpisode,
-          episodeTitle: result.data[0].episodeTitle || result.data[0].validation?.validatedEpisode?.title || result.data[0].secondPass?.episodeTitle || result.data[0].firstPass?.episodeTitle,
-          podcastTitle: result.data[0].podcastTitle || result.data[0].validation?.validatedPodcast?.title || result.data[0].secondPass?.podcastTitle || result.data[0].firstPass?.podcastTitle,
-          // Show all available properties
-          allKeys: Object.keys(result.data[0]),
-          firstPass: result.data[0].firstPass,
-          secondPass: result.data[0].secondPass,
-          validation: result.data[0].validation,
-          error: result.data[0].error,
-          fullItem: result.data[0]
-        } : null,
-        fullResult: result
-      });
-      
-      // Ensure result has the correct structure
-      const podcastInfoToSet = {
-        success: result.success,
-        data: result.data || [],
-        error: result.error || null
-      };
-      
-      console.log('📱 Mobile Debug: About to set state with:', {
-        success: podcastInfoToSet.success,
-        dataLength: podcastInfoToSet.data?.length || 0,
-        hasData: !!podcastInfoToSet.data,
-        podcastInfoToSet
-      });
-      
-      setPodcastInfo(podcastInfoToSet);
-      // Update the count of processed episodes
-      setProcessedEpisodeCount(result?.data?.length || 0);
+      setPodcastInfo(prev => ({
+        success: true,
+        data: [...(prev?.data || []), ...results],
+        error: null
+      }));
+      setProcessedEpisodeCount(count => count + results.length);
       // Clear previous transcripts when processing new screenshots
       setTranscripts({});
-    } catch (error) {
-      console.error('📱 Mobile Debug: Error processing screenshots:', {
-        error: error.message,
-        stack: error.stack,
-        name: error.name
-      });
-      
-      // Show error to user
-      alert(`Error processing screenshots: ${error.message}\n\nPlease try again or contact support if the issue persists.`);
-      
-      // Set error state for UI feedback
-      setPodcastInfo({
-        success: false,
-        error: error.message,
-        data: []
-      });
-      // Reset processed episode count on error
-      setProcessedEpisodeCount(0);
+
+      if (requestErrors.length > 0) {
+        alert(`Error processing ${requestErrors.length} screenshot(s): ${requestErrors[0]}\n\nPlease try again or contact support if the issue persists.`);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -265,6 +183,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
 
     // Process transcripts for ALL validated screenshots
     const episodes = [];
+    const failures = [];
     const validatedEpisodes = podcastInfo.data.filter(info => 
       info.validation?.validated && info.secondPass?.timestamp
     );
@@ -325,6 +244,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           }
         } catch (error) {
           console.error(`❌ Error generating transcript for episode ${index}:`, error);
+          failures.push(error.message);
         }
       } else {
         console.warn(`⚠️ Episode ${index} skipped - validation failed or missing timestamp:`, {
@@ -339,6 +259,13 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     console.log(`🎉 Transcript generation complete. Generated ${episodes.length} episodes out of ${podcastInfo.data.length} total`);
     
     // Return all episodes if we have any, otherwise return null
+    if (failures.length > 0) {
+      const summary = episodes.length > 0
+        ? `${failures.length} of ${failures.length + episodes.length} transcripts couldn't be generated`
+        : "The transcript couldn't be generated";
+      alert(`${summary}:\n\n${failures.join('\n')}`);
+    }
+
     return episodes.length > 0 ? { episodes } : null;
   };
 
@@ -385,7 +312,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
       return transcriptResult;
     } catch (error) {
       console.error(`❌ Error getting transcript for episode ${index}:`, error);
-      return null;
+      throw error;
     } finally {
       setIsGettingTranscript(false);
     }

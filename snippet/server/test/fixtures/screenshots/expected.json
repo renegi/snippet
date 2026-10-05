@@ -1,0 +1,43 @@
+{
+  "_note": "Expected results per screenshot. `ocr` lists text the OCR stage must pair up (one side each) before Apple Podcasts validation. Full titles marked confirmed: false still need checking.",
+  "big-picture-science.jpg": {
+    "player": "Apple Podcasts (full screen)",
+    "podcast": "Big Picture Science",
+    "episode": "What Moves Us",
+    "timestamp": "16:00",
+    "ocr": { "podcastText": "Big Picture Science", "episodeText": "What Moves Us" },
+    "confirmed": false
+  },
+  "football-weekly-lockscreen.jpg": {
+    "player": "Lock screen",
+    "podcast": "Football Weekly",
+    "episode": "…he Club World Cup, U21 glo… (truncated on screen)",
+    "timestamp": "15:22",
+    "ocr": { "podcastText": "Football Weekly", "episodeText": "Club World Cup" },
+    "confirmed": false
+  },
+  "where-should-we-begin-promo-card.jpg": {
+    "player": "Apple Podcasts (full screen, promo card below title)",
+    "podcast": "Where Should We Begin? with Esther Perel",
+    "episode": "Esther Calling - Never Bee… (truncated on screen)",
+    "timestamp": "26:53",
+    "ocr": { "podcastText": "Where Should We Begin", "episodeText": "Esther Calling" },
+    "confirmed": false
+  },
+  "search-engine-lockscreen.jpg": {
+    "player": "Lock screen",
+    "podcast": "Search Engine",
+    "episode": "The Psychic Question",
+    "timestamp": "9:23",
+    "ocr": { "podcastText": "Search Engine", "episodeText": "The Psychic Question" },
+    "confirmed": false
+  },
+  "marketplace-lockscreen.jpg": {
+    "player": "Lock screen",
+    "podcast": "Marketplace",
+    "episode": "…ading the labor market tea l… (truncated on screen)",
+    "timestamp": "15:14",
+    "ocr": { "podcastText": "Marketplace", "episodeText": "labor market" },
+    "confirmed": false
+  }
+}

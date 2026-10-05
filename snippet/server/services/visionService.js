@@ -2,47 +2,39 @@ const vision = require('@google-cloud/vision');
 const sharp = require('sharp');
 const logger = require('../utils/logger');
 const applePodcastsService = require('./applePodcastsService');
+const { getGoogleClientConfig } = require('../utils/googleCredentials');
+
+// Width (px) of the screenshots the pixel thresholds below were tuned on (iPhone 12-14)
+const REFERENCE_WIDTH = 1170;
+
+// Scales annotation coordinates and image dimensions so the image is REFERENCE_WIDTH wide.
+// A no-op for images that already are; without dimensions, returns the input unchanged.
+function normalizeToReferenceWidth(textAnnotations, imageDimensions) {
+  if (!imageDimensions?.width || imageDimensions.width === REFERENCE_WIDTH) {
+    return { textAnnotations, imageDimensions };
+  }
+
+  const scale = REFERENCE_WIDTH / imageDimensions.width;
+  const scaleVertex = v => ({ ...v, x: (v.x || 0) * scale, y: (v.y || 0) * scale });
+
+  return {
+    textAnnotations: textAnnotations.map(annotation => ({
+      ...annotation,
+      boundingPoly: annotation.boundingPoly && {
+        ...annotation.boundingPoly,
+        vertices: (annotation.boundingPoly.vertices || []).map(scaleVertex)
+      }
+    })),
+    imageDimensions: {
+      width: REFERENCE_WIDTH,
+      height: imageDimensions.height * scale
+    }
+  };
+}
 
 class VisionService {
   constructor() {
-    // Handle different authentication methods for different environments
-    let clientConfig = {};
-    
-    if (process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64) {
-      // For Render: decode base64 credentials
-      try {
-        const credentials = JSON.parse(
-          Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64, 'base64').toString()
-        );
-        clientConfig = {
-          credentials: credentials,
-          projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || credentials.project_id
-        };
-      } catch (error) {
-        console.error('Error parsing base64 credentials:', error);
-        throw error;
-      }
-    } else if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
-      // Alternative: individual credential fields
-      clientConfig = {
-        credentials: {
-          client_email: process.env.GOOGLE_CLIENT_EMAIL,
-          private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-          type: 'service_account'
-        },
-        projectId: process.env.GOOGLE_CLOUD_PROJECT_ID
-      };
-    } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-      // For local development: use file path
-      clientConfig = {
-        keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-        projectId: process.env.GOOGLE_CLOUD_PROJECT_ID
-      };
-    } else {
-      throw new Error('No valid Google Cloud credentials found. Please set GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY, or GOOGLE_APPLICATION_CREDENTIALS_BASE64');
-    }
-    
-    this.client = new vision.ImageAnnotatorClient(clientConfig);
+    this._client = null;
     
     // Configuration thresholds
     this.config = {
@@ -56,9 +48,28 @@ class VisionService {
     };
   }
 
-  async getImageDimensions(imagePath) {
+  // Created on first use so the OCR logic can be loaded (e.g. in tests) without credentials
+  get client() {
+    if (!this._client) {
+      this._client = new vision.ImageAnnotatorClient(getGoogleClientConfig());
+    }
+    return this._client;
+  }
+
+  // Finds title candidates and the playback timestamp in Vision text annotations.
+  // Geometry is first normalized to REFERENCE_WIDTH, because the filtering rules
+  // use absolute pixel sizes tuned on screenshots of that width.
+  analyzeAnnotations(textAnnotations, imageDimensions) {
+    const normalized = normalizeToReferenceWidth(textAnnotations, imageDimensions);
+    return {
+      candidates: this.extractTextCandidates(normalized.textAnnotations, normalized.imageDimensions),
+      timestamp: this.extractTimestamp(normalized.textAnnotations, normalized.imageDimensions)
+    };
+  }
+
+  async getImageDimensions(image) {
     try {
-      const metadata = await sharp(imagePath).metadata();
+      const metadata = await sharp(image).metadata();
       return {
         width: metadata.width,
         height: metadata.height
@@ -69,24 +80,23 @@ class VisionService {
     }
   }
 
-  async extractText(imagePath) {
+  // `image` is a Buffer (uploads are kept in memory) or a file path
+  async extractText(image) {
     try {
-      logger.info('Mobile Debug: Starting Vision API text detection', {
-        imagePath,
-        fileExists: require('fs').existsSync(imagePath)
-      });
+      logger.info('Mobile Debug: Starting Vision API text detection');
       
       // Extract image dimensions for image-relative filtering
-      const imageDimensions = await this.getImageDimensions(imagePath);
+      const imageDimensions = await this.getImageDimensions(image);
       logger.info('Mobile Debug: Image dimensions:', imageDimensions);
       
       // Add timeout for large mobile images
-      const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Vision API timeout - image too large or processing taking too long')), 30000)
-      );
+      let timeoutId;
+      const timeout = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Vision API timeout - image too large or processing taking too long')), 30000);
+      });
       
-      const visionCall = this.client.textDetection(imagePath);
-      const [result] = await Promise.race([visionCall, timeout]);
+      const visionCall = this.client.textDetection(image);
+      const [result] = await Promise.race([visionCall, timeout]).finally(() => clearTimeout(timeoutId));
       
       logger.info('Mobile Debug: Vision API call completed successfully');
       const detections = result.textAnnotations;
@@ -99,8 +109,7 @@ class VisionService {
       logger.info('OCR Full Text:', fullText);
       
       // Extract structured information with image dimensions
-      const candidates = this.extractTextCandidates(detections, imageDimensions);
-      const timestamp = this.extractTimestamp(detections, imageDimensions);
+      const { candidates, timestamp } = this.analyzeAnnotations(detections, imageDimensions);
       logger.info(`⏰ Mobile Debug: extractText - Timestamp extracted: ${timestamp}`);
       
       logger.info(`Found ${candidates.length} text candidates`);
@@ -122,8 +131,7 @@ class VisionService {
       logger.error('Mobile Debug: Error in Vision API:', {
         error: error.message,
         code: error.code,
-        stack: error.stack,
-        imagePath
+        stack: error.stack
       });
       
       // Provide more specific error messages
@@ -1776,10 +1784,21 @@ class VisionService {
       logger.info(`⏰ Mobile Debug: extractTimestamp - Final candidate ${index}: "${candidate.time}" (Y: ${candidate.y})`);
     });
     
-    // Sort by Y position (prefer timestamps lower on screen in content area)
-    podcastTimestamps.sort((a, b) => b.y - a.y);
+    // Players show elapsed time on the same row as the remaining time ("15:14 ... -15:36").
+    // Prefer timestamps on such a row, so times elsewhere (e.g. "4:30" in a lower
+    // notification) aren't picked just for being lower on screen.
+    const remainingTimeYs = individualTexts
+      .filter(t => /^[-−–]\d{1,2}(:\d{2}){0,2}$/.test(t.description))
+      .map(t => t.boundingPoly.vertices[0].y);
+    const onPlayerRow = podcastTimestamps.filter(candidate =>
+      remainingTimeYs.some(y => Math.abs(y - candidate.y) < this.config.lineTolerance)
+    );
+    const preferredTimestamps = onPlayerRow.length > 0 ? onPlayerRow : podcastTimestamps;
     
-    const result = podcastTimestamps.length > 0 ? podcastTimestamps[0].time : null;
+    // Sort by Y position (prefer timestamps lower on screen in content area)
+    preferredTimestamps.sort((a, b) => b.y - a.y);
+    
+    const result = preferredTimestamps.length > 0 ? preferredTimestamps[0].time : null;
     logger.info(`⏰ Mobile Debug: extractTimestamp - Final result: ${result}`);
     return result;
     } catch (error) {
@@ -1859,4 +1878,5 @@ class VisionService {
   }
 }
 
-module.exports = new VisionService(); 
+module.exports = new VisionService();
+module.exports.normalizeToReferenceWidth = normalizeToReferenceWidth; 
