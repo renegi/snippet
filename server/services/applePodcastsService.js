@@ -1,6 +1,9 @@
 const logger = require('../utils/logger');
 const xml2js = require('xml2js');
 
+// Lowercases and collapses whitespace so titles can be compared exactly
+const normalizeTitle = title => String(title || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
 class ApplePodcastsService {
   constructor() {
     this.baseUrl = 'https://itunes.apple.com';
@@ -953,9 +956,35 @@ class ApplePodcastsService {
     }
   }
 
+  // Finds the episode's audio URL in Apple's episode data (the 200 most recent
+  // episodes), matching by Apple ID when known and otherwise by exact title.
+  // Returns null when the episode isn't found, so callers can fall back to RSS.
+  async getEpisodeAudioUrlFromApple(podcastId, episode) {
+    try {
+      if (!podcastId || !episode?.title) return null;
+
+      const { episodes } = await this.searchEpisodes(podcastId, null);
+      const title = normalizeTitle(episode.title);
+      const match =
+        (episode.id && episodes.find(e => String(e.trackId) === String(episode.id))) ||
+        episodes.find(e => normalizeTitle(e.trackName) === title);
+
+      if (!match?.episodeUrl) {
+        logger.info(`Episode "${episode.title}" not found in Apple episode data`);
+        return null;
+      }
+      return match.episodeUrl;
+    } catch (error) {
+      logger.warn('Apple episode audio lookup failed:', { error: error.message });
+      return null;
+    }
+  }
+
   // Parse RSS feed to find episode audio URL
   async getEpisodeAudioUrl(feedUrl, episodeTitle) {
     try {
+      if (!feedUrl || !episodeTitle) return null;
+
       logger.info(`Parsing RSS feed for episode: "${episodeTitle}"`);
       logger.info(`RSS feed URL: ${feedUrl}`);
       
@@ -980,17 +1009,23 @@ class ApplePodcastsService {
       const episodes = result.rss.channel[0].item;
       logger.info(`Found ${episodes.length} episodes in RSS feed`);
       
-      // Find episode matching the title
-      const targetEpisode = episodes.find(episode => {
-        const title = episode.title && episode.title[0];
-        if (!title) return false;
-        
-        // Calculate similarity between episode titles
-        const similarity = this.calculateSimilarity(episodeTitle.toLowerCase(), title.toLowerCase());
-        logger.debug(`Episode similarity: "${title}" vs "${episodeTitle}" = ${similarity.toFixed(3)}`);
-        
-        return similarity > 0.7; // 70% similarity threshold
-      });
+      // Find the episode matching the title: an exact match if there is one,
+      // otherwise the most similar title above the 70% threshold
+      const rssTitle = episode => (episode.title && episode.title[0]) || '';
+      const wanted = normalizeTitle(episodeTitle);
+      let targetEpisode = episodes.find(episode => normalizeTitle(rssTitle(episode)) === wanted);
+      if (!targetEpisode) {
+        let bestSimilarity = 0.7;
+        for (const episode of episodes) {
+          const title = rssTitle(episode);
+          if (!title) continue;
+          const similarity = this.calculateSimilarity(episodeTitle.toLowerCase(), title.toLowerCase());
+          if (similarity > bestSimilarity) {
+            bestSimilarity = similarity;
+            targetEpisode = episode;
+          }
+        }
+      }
 
       if (!targetEpisode) {
         logger.warn(`No episode found matching "${episodeTitle}" in RSS feed`);

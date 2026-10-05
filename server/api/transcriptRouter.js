@@ -21,29 +21,29 @@ router.post('/', async (req, res) => {
       timeRange
     });
 
-    // Step 1: Try to get the podcast RSS feed URL
-    let audioUrl = null;
-    
-    try {
-      // Get detailed podcast information including RSS feed
-      const podcastDetails = await applePodcastsService.getPodcastDetails(podcastInfo.validatedPodcast.id);
-      
-      if (podcastDetails?.feedUrl) {
-        logger.info(`Found RSS feed URL: ${podcastDetails.feedUrl}`);
-        
-        // Step 2: Parse RSS feed to find the specific episode audio URL
-        const episodeAudioUrl = await applePodcastsService.getEpisodeAudioUrl(
-          podcastDetails.feedUrl,
-          podcastInfo.validatedEpisode?.title
-        );
-        
-        if (episodeAudioUrl) {
-          audioUrl = episodeAudioUrl;
-          logger.info(`Found episode audio URL: ${audioUrl.substring(0, 100)}...`);
+    // Step 1: Get the audio URL from Apple's episode data (fast, matches by ID or exact title)
+    let audioUrl = await applePodcastsService.getEpisodeAudioUrlFromApple(
+      podcastInfo.validatedPodcast.id,
+      podcastInfo.validatedEpisode
+    );
+
+    // Step 2: Fall back to the podcast's RSS feed (covers episodes older than Apple's 200 most recent)
+    if (!audioUrl) {
+      try {
+        const podcastDetails = await applePodcastsService.getPodcastDetails(podcastInfo.validatedPodcast.id);
+        if (podcastDetails?.feedUrl) {
+          audioUrl = await applePodcastsService.getEpisodeAudioUrl(
+            podcastDetails.feedUrl,
+            podcastInfo.validatedEpisode?.title
+          );
         }
+      } catch (error) {
+        logger.warn('Failed to get audio URL from RSS feed:', error.message);
       }
-    } catch (error) {
-      logger.warn('Failed to get audio URL from RSS feed:', error.message);
+    }
+
+    if (audioUrl) {
+      logger.info(`Found episode audio URL: ${audioUrl.substring(0, 100)}...`);
     }
 
     if (!audioUrl) {
