@@ -33,7 +33,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f6f3ee]">
+    <div className="app-shell bg-[#f6f3ee]">
       {!showProcessor ? (
         <>
           <HomeScreen onSelectScreenshots={handleSelectScreenshots} onFilesSelected={handleFilesSelected} />

@@ -430,7 +430,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
 
   // Always show the new UI
   return (
-    <div className="w-full max-w-[393px] mx-auto">
+    <div className="w-full max-w-[393px] h-full mx-auto">
       <TimeRangeSelection
         screenshots={screenshots}
         onAddScreenshots={handleAddScreenshots}

@@ -142,7 +142,7 @@ const TimeRangeSelection = ({
 
   if (showTranscript && episodes.length > 0) {
     return (
-      <div className="w-full max-w-[393px] mx-auto">
+      <div className="w-full max-w-[393px] h-full mx-auto">
         <TranscriptHighlighting
           episodes={episodes}
           currentEpisodeIndex={currentEpisodeIndex}
@@ -156,7 +156,7 @@ const TimeRangeSelection = ({
   }
       
   return (
-    <div className="w-full max-w-[393px] mx-auto">
+    <div className="w-full max-w-[393px] h-full mx-auto">
       {/* Main Content - Remove browser chrome */}
       <MainContent 
         screenshots={screenshots}
