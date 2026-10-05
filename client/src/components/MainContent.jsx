@@ -1,10 +1,14 @@
 import React, { useState, useRef, useEffect } from "react";
-import PrimaryButtonL from "./PrimaryButtonL";
+import { PlusIcon } from "@heroicons/react/20/solid";
+import { ClipboardIcon } from "@heroicons/react/24/outline";
+import Button from "./Button";
+import { canReadClipboard, pasteScreenshots } from "../services/clipboard";
 
 const MainContent = ({ 
   className = "",
   screenshots = [],
   onAddScreenshots,
+  onPasteScreenshots,
   onGenerateTranscript,
   onScreenshotClick,
   isProcessing = false,
@@ -17,6 +21,23 @@ const MainContent = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragHandle, setDragHandle] = useState(null); // 'left' or 'right'
   const timelineRef = useRef(null);
+  const [pasteMessage, setPasteMessage] = useState('');
+
+  const handlePaste = async () => {
+    setPasteMessage('');
+    const { files, message } = await pasteScreenshots();
+    setPasteMessage(message);
+    if (files.length > 0) {
+      onPasteScreenshots(files);
+    }
+  };
+
+  // Paste messages are transient, so clear them after a few seconds
+  useEffect(() => {
+    if (!pasteMessage) return;
+    const timer = setTimeout(() => setPasteMessage(''), 4000);
+    return () => clearTimeout(timer);
+  }, [pasteMessage]);
 
   // Timeline spans from -120s to +120s with 13 notches for proper 15s intervals
   // Notch positions: -120, -90, -60, -45, -30, -15, 0, 15, 30, 45, 60, 90, 120
@@ -244,26 +265,30 @@ const MainContent = ({
     <div
       className={`w-full max-w-[393px] bg-[#f6f3ee] h-[678px] overflow-hidden shrink-0 flex flex-col items-center justify-start pt-4 px-0 pb-0 box-border gap-0 text-left text-2xl text-[#1b1b1b] font-['Termina'] relative ${className}`}
     >
-      {/* Fixed header with title and add button */}
-      <div className="w-full max-w-[361px] px-4 flex flex-row items-center justify-between gap-0 mb-6">
+      {/* Fixed header with title, paste and add buttons */}
+      <div className="w-full px-4 flex flex-row items-center justify-between gap-0">
         <b className="relative leading-[130%]">
           {screenshots.length} screenshot{screenshots.length === 1 ? '' : 's'}
         </b>
-        <button
-          onClick={onAddScreenshots}
-          className="w-10 rounded-xl h-10 overflow-hidden shrink-0 bg-[#1b1b1b] hover:bg-[#333] transition-colors flex items-center justify-center"
-        >
-          <div className="relative w-4 h-4">
-            {/* Horizontal line */}
-            <div className="absolute top-1/2 left-0 w-4 h-0.5 bg-white rounded-full transform -translate-y-1/2"></div>
-            {/* Vertical line */}
-            <div className="absolute left-1/2 top-0 w-0.5 h-4 bg-white rounded-full transform -translate-x-1/2"></div>
-          </div>
-        </button>
+        <div className="flex flex-row items-center gap-2">
+          {canReadClipboard() && (
+            <Button
+              variant="secondary"
+              size="s"
+              icon={<ClipboardIcon />}
+              aria-label="Paste screenshot"
+              onClick={handlePaste}
+            />
+          )}
+          <Button size="s" icon={<PlusIcon />} aria-label="Add screenshots" onClick={onAddScreenshots} />
+        </div>
       </div>
+      <p role="status" className="w-full px-4 h-6 flex items-center justify-end text-xs leading-[130%]">
+        {pasteMessage}
+      </p>
 
       {/* Scrollable list area */}
-      <div className="w-full max-w-[361px] px-4 flex-1 flex flex-col items-start justify-start overflow-y-auto pb-[240px]">
+      <div className="w-full px-4 flex-1 flex flex-col items-start justify-start overflow-y-auto pb-[240px]">
         <div className="w-full flex flex-col items-start justify-start gap-4 text-sm">
           {screenshots.map((screenshot, index) => {
             // Use the shouldShowGhostLoading flag from the screenshot object
@@ -309,15 +334,17 @@ const MainContent = ({
                     </div>
                   )}
                   {screenshot.podcastInfo?.needsEpisodeChoice && (
-                    <button
+                    <Button
+                      variant="secondary"
+                      size="xs"
                       onClick={(e) => {
                         e.stopPropagation();
                         onScreenshotClick && onScreenshotClick(index);
                       }}
-                      className="mt-1 h-8 px-3 rounded-[12px] bg-[#DDDAD1] hover:bg-[#E4E0D2] transition-colors text-xs leading-[130%] text-[#1B1B1B] whitespace-nowrap"
+                      className="mt-1"
                     >
-                      <b>Select episode</b>
-                    </button>
+                      Select episode
+                    </Button>
                   )}
                 </div>
               </div>
@@ -430,13 +457,13 @@ const MainContent = ({
               </div>
             </div>
           ) : (
-            <PrimaryButtonL
+            <Button
               onClick={handleGenerateTranscript}
               disabled={totalSelected === 0}
-              className={totalSelected === 0 ? 'opacity-50 cursor-not-allowed' : ''}
+              className="w-full max-w-[361px]"
             >
               Generate transcript
-            </PrimaryButtonL>
+            </Button>
           )}
         </div>
       </div>

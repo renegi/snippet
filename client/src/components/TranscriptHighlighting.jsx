@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import PrimaryButtonL from "./PrimaryButtonL";
+import Button from "./Button";
 
 const TranscriptHighlighting = ({ 
   className = "",
@@ -1285,19 +1285,16 @@ const TranscriptHighlighting = ({
       <div className="self-stretch bg-[#f6f3ee] overflow-hidden flex flex-row items-center justify-start pt-4 px-4 pb-6 gap-4 shrink-0 relative">
         {/* Edge-to-edge divider line */}
         <div className="absolute top-0 left-0 right-0 h-px bg-[#dddad1]"></div>
-        <button
-          onClick={onDone}
-          className="h-16 rounded-[24px] bg-[#dddad1] transition-colors overflow-hidden flex flex-row items-center justify-center py-[18px] px-6 box-border text-left text-base text-[#1b1b1b] font-['Termina']"
-        >
-          <b className="relative leading-[125%]">Done</b>
-        </button>
-        
-        <PrimaryButtonL
+        <Button variant="secondary" onClick={onDone}>
+          Done
+        </Button>
+
+        <Button
           onClick={handleCopySnippets}
-          className={`flex-1 ${isCopied ? '!bg-[#126545] !hover:bg-[#126545] !border-[#126545] !hover:border-[#126545]' : ''}`}
+          className={`flex-1 max-w-[361px] ${isCopied ? '!bg-[#126545]' : ''}`}
         >
           {isCopied ? "Copied to clipboard" : "Copy snippets"}
-        </PrimaryButtonL>
+        </Button>
       </div>
     </div>
   );

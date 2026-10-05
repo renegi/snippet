@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { XMarkIcon, TrashIcon } from '@heroicons/react/24/outline';
-import PrimaryButtonL from './PrimaryButtonL';
+import Button from './Button';
 import { API_BASE_URL } from '../services/api';
 
 const ScreenshotEditModal = ({ 
@@ -199,7 +199,7 @@ const ScreenshotEditModal = ({
       <div className="fixed inset-0 z-50 flex items-end justify-center">
         <div className="w-full h-[90vh] bg-[#F6F4EE] rounded-t-[24px] shadow-xl transform transition-all duration-300 ease-out flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-[#DDDAD1]">
+          <div className="flex items-center justify-between px-4 py-6 border-b border-[#DDDAD1]">
             <h2 className="text-xl font-semibold text-[#1B1B1B] font-['Termina']">Edit screenshot</h2>
             <button
               onClick={onClose}
@@ -210,7 +210,7 @@ const ScreenshotEditModal = ({
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
             {/* Screenshot Thumbnail */}
             {screenshotData?.preview && (
               <div className="flex justify-center">
@@ -382,32 +382,25 @@ const ScreenshotEditModal = ({
 
             {/* Delete Button */}
             <div className="pt-6 border-t border-[#DDDAD1]">
-              <button
-                onClick={handleDelete}
-                className="w-full flex items-center justify-center px-4 py-3 border border-[#BE3E37] text-[#BE3E37] rounded-[16px] hover:bg-[#BE3E37] hover:text-white transition-colors font-['Termina']"
-              >
-                <TrashIcon className="h-5 w-5 mr-2" />
+              <Button variant="destructive" icon={<TrashIcon />} onClick={handleDelete} className="w-full">
                 Delete Screenshot
-              </button>
+              </Button>
             </div>
           </div>
 
           {/* Floating Footer */}
-          <div className="bg-[#F6F4EE] border-t border-[#DDDAD1] p-6 flex gap-4">
-            <button
-              onClick={handleCancel}
-              className="flex-1 h-16 rounded-[24px] bg-[#DDDAD1] transition-colors overflow-hidden flex flex-row items-center justify-center py-[18px] px-6 box-border text-left text-lg text-[#1B1B1B] font-['Termina']"
-            >
-              <b className="relative leading-[130%]">Cancel</b>
-            </button>
+          <div className="bg-[#F6F4EE] border-t border-[#DDDAD1] px-4 py-6 flex gap-4">
+            <Button variant="secondary" onClick={handleCancel} className="flex-1">
+              Cancel
+            </Button>
             
-            <PrimaryButtonL
+            <Button
               onClick={handleUpdate}
               disabled={!selectedPodcast || !selectedEpisode}
-              className="flex-1"
+              className="flex-1 max-w-[361px]"
             >
               Update
-            </PrimaryButtonL>
+            </Button>
           </div>
         </div>
       </div>
