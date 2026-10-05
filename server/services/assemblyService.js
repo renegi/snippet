@@ -74,8 +74,7 @@ class AssemblyService {
         audio_end_at: endTimeMs,
         // Enable word-level timestamps for better precision
         format_text: true,
-        punctuate: true,
-        dual_channel: false
+        punctuate: true
       });
 
       const transcriptId = transcriptResponse.data.id;
@@ -111,8 +110,14 @@ class AssemblyService {
 
       return result;
     } catch (error) {
-      logger.error('Error in AssemblyAI API:', error);
-      throw error;
+      // Surface AssemblyAI's own explanation (e.g. a rejected parameter or unreachable audio URL)
+      const apiMessage = error.response?.data?.error;
+      logger.error('Error in AssemblyAI API:', {
+        message: error.message,
+        status: error.response?.status,
+        apiMessage
+      });
+      throw apiMessage ? new Error(apiMessage) : error;
     }
   }
 
