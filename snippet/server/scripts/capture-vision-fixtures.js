@@ -61,7 +61,47 @@ async function main() {
   }
 }
 
+// Describes the credential setup without printing any secret values.
+function describeCredentials() {
+  const env = process.env;
+  const method = env.GOOGLE_APPLICATION_CREDENTIALS_BASE64 ? 'GOOGLE_APPLICATION_CREDENTIALS_BASE64'
+    : (env.GOOGLE_CLIENT_EMAIL && env.GOOGLE_PRIVATE_KEY) ? 'GOOGLE_CLIENT_EMAIL + GOOGLE_PRIVATE_KEY'
+    : env.GOOGLE_APPLICATION_CREDENTIALS ? 'GOOGLE_APPLICATION_CREDENTIALS (file)'
+    : 'none';
+  console.error(`\nCredential method in use: ${method}`);
+
+  let key;
+  try {
+    const config = getGoogleClientConfig();
+    if (config.keyFilename) {
+      const exists = fs.existsSync(config.keyFilename);
+      console.error(`  Credentials file exists: ${exists}`);
+      if (!exists) return;
+      key = JSON.parse(fs.readFileSync(config.keyFilename, 'utf8')).private_key;
+    } else {
+      key = config.credentials.private_key;
+    }
+  } catch (error) {
+    console.error(`  Could not load credentials: ${error.message}`);
+    return;
+  }
+
+  key = key || '';
+  const trimmed = key.trim();
+  console.error(`  Private key length: ${key.length} characters (a real key is ~1700)`);
+  console.error(`  Starts with "-----BEGIN PRIVATE KEY-----": ${trimmed.startsWith('-----BEGIN PRIVATE KEY-----')}`);
+  console.error(`  Ends with "-----END PRIVATE KEY-----": ${trimmed.endsWith('-----END PRIVATE KEY-----')}`);
+  console.error(`  Contains real line breaks: ${key.includes('\n')}`);
+  console.error(`  Contains literal "\\n" text: ${key.includes('\\n')}`);
+  const otherVars = ['GOOGLE_APPLICATION_CREDENTIALS_BASE64', 'GOOGLE_PRIVATE_KEY', 'GOOGLE_APPLICATION_CREDENTIALS']
+    .filter(name => env[name]);
+  if (otherVars.length > 1) {
+    console.error(`  Note: several credential variables are set (${otherVars.join(', ')}); the first one listed above wins.`);
+  }
+}
+
 main().catch(error => {
   console.error('Capture failed:', error.message);
+  describeCredentials();
   process.exit(1);
 });
