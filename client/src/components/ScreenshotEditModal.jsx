@@ -28,7 +28,6 @@ const ScreenshotEditModal = ({
   // Initialize form with existing data
   useEffect(() => {
     if (isOpen && screenshotData) {
-      console.log('Initializing modal with data:', screenshotData);
       
       const podcast = screenshotData.validation?.validatedPodcast || null;
       const episode = screenshotData.validation?.validatedEpisode || null;
@@ -36,7 +35,6 @@ const ScreenshotEditModal = ({
       const podcastTitle = screenshotData.podcastTitle || screenshotData.secondPass?.podcastTitle || screenshotData.firstPass?.podcastTitle || '';
       const episodeTitle = screenshotData.episodeTitle || screenshotData.secondPass?.episodeTitle || screenshotData.firstPass?.episodeTitle || '';
       
-      console.log('Setting form data:', { podcast, episode, timestamp, podcastTitle, episodeTitle });
       
       setSelectedPodcast(podcast);
       setSelectedEpisode(episode);
@@ -166,11 +164,6 @@ const ScreenshotEditModal = ({
   };
 
   const handleUpdate = () => {
-    console.log('handleUpdate called with:', {
-      podcast: selectedPodcast,
-      episode: selectedEpisode,
-      timestamp: selectedTimestamp
-    });
     
     onUpdate({
       podcast: selectedPodcast,

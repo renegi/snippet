@@ -43,7 +43,7 @@ class AssemblyService {
 
   async getTranscript(audioUrl, timestamp, timeRange) {
     try {
-      logger.info('Starting transcription request:', {
+      logger.debug('Starting transcription request:', {
         audioUrl: audioUrl.substring(0, 100) + '...',
         timestamp,
         timeRange
@@ -56,7 +56,7 @@ class AssemblyService {
       const startTimeMs = Math.max(0, (timestampSeconds - timeRange.before) * 1000);
       const endTimeMs = (timestampSeconds + timeRange.after) * 1000;
 
-      logger.info('Calculated time range:', {
+      logger.debug('Calculated time range:', {
         timestampSeconds,
         startTimeMs,
         endTimeMs,
@@ -78,7 +78,7 @@ class AssemblyService {
       });
 
       const transcriptId = transcriptResponse.data.id;
-      logger.info(`Transcription job submitted with ID: ${transcriptId}`);
+      logger.debug(`Transcription job submitted with ID: ${transcriptId}`);
 
       // Poll for transcript completion
       let transcript = await this.pollTranscript(transcriptId);
@@ -100,7 +100,7 @@ class AssemblyService {
         transcriptId
       };
 
-      logger.info('Transcription completed:', {
+      logger.debug('Transcription completed:', {
         transcriptId,
         textLength: result.text.length,
         wordCount: result.words.length,
@@ -125,17 +125,17 @@ class AssemblyService {
     const maxAttempts = 60; // Increased to 2 minutes
     const interval = 2000; // 2 seconds
 
-    logger.info(`Polling for transcript ${transcriptId}...`);
+    logger.debug(`Polling for transcript ${transcriptId}...`);
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         const response = await this.client.get(`/transcript/${transcriptId}`);
         const transcript = response.data;
 
-        logger.info(`Polling attempt ${attempt + 1}/${maxAttempts}, status: ${transcript.status}`);
+        logger.debug(`Polling attempt ${attempt + 1}/${maxAttempts}, status: ${transcript.status}`);
 
         if (transcript.status === 'completed') {
-          logger.info('Transcription completed successfully');
+          logger.debug('Transcription completed successfully');
           return transcript;
         } else if (transcript.status === 'error') {
           logger.error('Transcription failed:', transcript.error);

@@ -12,7 +12,7 @@ class ApplePodcastsService {
 
   async validatePodcastInfo(podcastTitle, episodeTitle) {
     try {
-      logger.info('Validating podcast info with Apple Podcasts API', {
+      logger.debug('Validating podcast info with Apple Podcasts API', {
         podcastTitle,
         episodeTitle
       });
@@ -33,7 +33,7 @@ class ApplePodcastsService {
         
         // If exact search fails and we have an episode title, try fuzzy search
         if (!podcastResult?.validatedPodcast && episodeTitle) {
-          logger.info(`Exact podcast search failed for "${podcastTitle}", trying fuzzy search`);
+          logger.debug(`Exact podcast search failed for "${podcastTitle}", trying fuzzy search`);
           podcastResult = await this.fuzzySearchPodcast(podcastTitle, episodeTitle);
         }
       }
@@ -63,10 +63,10 @@ class ApplePodcastsService {
             // Both podcast and episode found - high confidence
             confidence += 0.6;
             validated = true;
-            logger.info(`Podcast validation SUCCESS: "${podcastTitle}" → "${podcastResult.validatedPodcast.title}" (episode found: "${episodeTitle}" → "${episodeResult.validatedEpisode.title}")`);
+            logger.debug(`Podcast validation SUCCESS: "${podcastTitle}" → "${podcastResult.validatedPodcast.title}" (episode found: "${episodeTitle}" → "${episodeResult.validatedEpisode.title}")`);
           } else {
             // Podcast found but episode not found - return podcast info for cross-pair testing
-            logger.info(`Podcast validation PARTIAL: "${podcastTitle}" → "${podcastResult.validatedPodcast.title}" but episode "${episodeTitle}" not found in this podcast`);
+            logger.debug(`Podcast validation PARTIAL: "${podcastTitle}" → "${podcastResult.validatedPodcast.title}" but episode "${episodeTitle}" not found in this podcast`);
             // Keep the podcast info for cross-pair testing, but don't mark as fully validated
             validated = false;
             confidence = 0.6; // Podcast confidence only
@@ -75,20 +75,20 @@ class ApplePodcastsService {
           // No episode title provided, just validate the podcast
           confidence += 0.6;
           validated = true;
-          logger.info(`Podcast validation SUCCESS: "${podcastTitle}" → "${podcastResult.validatedPodcast.title}" (no episode title provided)`);
+          logger.debug(`Podcast validation SUCCESS: "${podcastTitle}" → "${podcastResult.validatedPodcast.title}" (no episode title provided)`);
         }
       } else {
-        logger.info(`Podcast validation FAILED: "${podcastTitle}" not found in Apple Podcasts`);
+        logger.debug(`Podcast validation FAILED: "${podcastTitle}" not found in Apple Podcasts`);
       }
 
       if (episodeResult?.validatedEpisode) {
         confidence += 0.4;
-        logger.info(`Episode validation SUCCESS: "${episodeTitle}" → "${episodeResult.validatedEpisode.title}" (confidence: ${episodeResult.validatedEpisode.confidence})`);
+        logger.debug(`Episode validation SUCCESS: "${episodeTitle}" → "${episodeResult.validatedEpisode.title}" (confidence: ${episodeResult.validatedEpisode.confidence})`);
       } else if (episodeTitle && podcastResult?.validatedPodcast) {
-        logger.info(`Episode validation FAILED: "${episodeTitle}" not found in podcast "${podcastResult.validatedPodcast.title}"`);
+        logger.debug(`Episode validation FAILED: "${episodeTitle}" not found in podcast "${podcastResult.validatedPodcast.title}"`);
       }
 
-      logger.info(`Final validation result: validated=${validated}, confidence=${confidence.toFixed(3)}`);
+      logger.debug(`Final validation result: validated=${validated}, confidence=${confidence.toFixed(3)}`);
 
       return {
         validated,
@@ -113,7 +113,7 @@ class ApplePodcastsService {
       const searchTerm = encodeURIComponent(podcastTitle);
       const url = `${this.baseUrl}/search?term=${searchTerm}&entity=podcast&limit=5`;
 
-      logger.info(`Searching for podcast: "${podcastTitle}" with URL: ${url}`);
+      logger.debug(`Searching for podcast: "${podcastTitle}" with URL: ${url}`);
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -123,10 +123,10 @@ class ApplePodcastsService {
       const data = await response.json();
       const results = data.results || [];
 
-      logger.info(`Apple Podcasts search returned ${results.length} results for "${podcastTitle}"`);
+      logger.debug(`Apple Podcasts search returned ${results.length} results for "${podcastTitle}"`);
 
       if (results.length === 0) {
-        logger.info(`No results found for "${podcastTitle}"`);
+        logger.debug(`No results found for "${podcastTitle}"`);
         return {
           validatedPodcast: null,
           suggestions: []
@@ -136,10 +136,10 @@ class ApplePodcastsService {
       // Find the best match
       const bestMatch = this.findBestMatch(podcastTitle, results);
       
-      logger.info(`Best match for "${podcastTitle}": "${bestMatch?.result?.collectionName || 'none'}" (similarity: ${bestMatch?.similarity?.toFixed(3) || 'undefined'})`);
+      logger.debug(`Best match for "${podcastTitle}": "${bestMatch?.result?.collectionName || 'none'}" (similarity: ${bestMatch?.similarity?.toFixed(3) || 'undefined'})`);
       
       if (bestMatch && bestMatch.similarity > 0.7) {
-        logger.info(`Validating podcast "${podcastTitle}" as "${bestMatch.result.collectionName}" (similarity: ${bestMatch.similarity.toFixed(3)} >= 0.7)`);
+        logger.debug(`Validating podcast "${podcastTitle}" as "${bestMatch.result.collectionName}" (similarity: ${bestMatch.similarity.toFixed(3)} >= 0.7)`);
         return {
           validatedPodcast: {
             id: bestMatch.result.collectionId,
@@ -157,7 +157,7 @@ class ApplePodcastsService {
         };
       }
 
-      logger.info(`Podcast "${podcastTitle}" validation failed (similarity: ${bestMatch?.similarity?.toFixed(3) || 'undefined'} < 0.7)`);
+      logger.debug(`Podcast "${podcastTitle}" validation failed (similarity: ${bestMatch?.similarity?.toFixed(3) || 'undefined'} < 0.7)`);
       return {
         validatedPodcast: null,
         suggestions: results.slice(0, 3).map(r => ({
@@ -182,7 +182,7 @@ class ApplePodcastsService {
       const encodedTerm = encodeURIComponent(searchTerm);
       const url = `${this.baseUrl}/search?term=${encodedTerm}&entity=podcast&limit=10`;
 
-      logger.info(`Searching multiple podcasts for term: "${searchTerm}"`);
+      logger.debug(`Searching multiple podcasts for term: "${searchTerm}"`);
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -192,7 +192,7 @@ class ApplePodcastsService {
       const data = await response.json();
       const results = data.results || [];
 
-      logger.info(`Apple Podcasts search returned ${results.length} results for "${searchTerm}"`);
+      logger.debug(`Apple Podcasts search returned ${results.length} results for "${searchTerm}"`);
 
       // Return all results as podcast objects
       const podcasts = results.map(result => ({
@@ -206,7 +206,7 @@ class ApplePodcastsService {
       
       // Log the top candidates for debugging
       const topCandidates = podcasts.slice(0, 3);
-      logger.info(`Top podcast candidates for "${searchTerm}":`, topCandidates.map(p => 
+      logger.debug(`Top podcast candidates for "${searchTerm}":`, topCandidates.map(p => 
         `"${p.title}" (confidence: ${p.confidence.toFixed(3)})`
       ));
 
@@ -220,7 +220,7 @@ class ApplePodcastsService {
 
   async fuzzySearchPodcast(podcastTitle, episodeTitle) {
     try {
-      logger.info(`Starting fuzzy podcast search for "${podcastTitle}" with episode "${episodeTitle}"`);
+      logger.debug(`Starting fuzzy podcast search for "${podcastTitle}" with episode "${episodeTitle}"`);
       
       // Cache for podcast search results to avoid duplicate API calls
       const searchCache = new Map();
@@ -228,18 +228,18 @@ class ApplePodcastsService {
       // Phase 1: Fuzzy podcast search of cleaned up text
       const phase1Result = await this.fuzzySearchPodcastPhase1(podcastTitle, episodeTitle, searchCache);
       if (phase1Result?.validatedPodcast) {
-        logger.info(`Phase 1 fuzzy search successful: "${podcastTitle}" → "${phase1Result.validatedPodcast.title}"`);
+        logger.debug(`Phase 1 fuzzy search successful: "${podcastTitle}" → "${phase1Result.validatedPodcast.title}"`);
         return phase1Result;
       }
       
       // Phase 2: Fuzzy podcast search with middle words (only if Phase 1 failed)
       const phase2Result = await this.fuzzySearchPodcastPhase2(podcastTitle, episodeTitle, searchCache);
       if (phase2Result?.validatedPodcast) {
-        logger.info(`Phase 2 fuzzy search successful: "${podcastTitle}" → "${phase2Result.validatedPodcast.title}"`);
+        logger.debug(`Phase 2 fuzzy search successful: "${podcastTitle}" → "${phase2Result.validatedPodcast.title}"`);
         return phase2Result;
       }
       
-      logger.info(`Fuzzy podcast search failed for "${podcastTitle}"`);
+      logger.debug(`Fuzzy podcast search failed for "${podcastTitle}"`);
       return { validatedPodcast: null };
       
     } catch (error) {
@@ -250,14 +250,14 @@ class ApplePodcastsService {
 
   async fuzzySearchPodcastPhase1(podcastTitle, episodeTitle, searchCache = new Map()) {
     try {
-      logger.info(`Phase 1: Fuzzy search with cleaned text for "${podcastTitle}"`);
+      logger.debug(`Phase 1: Fuzzy search with cleaned text for "${podcastTitle}"`);
       
       // Step 1: Remove punctuation and partial words
       const cleanedText = this.cleanPodcastText(podcastTitle);
-      logger.info(`Cleaned text: "${cleanedText}"`);
+      logger.debug(`Cleaned text: "${cleanedText}"`);
       
       if (!cleanedText || cleanedText.length < 3) {
-        logger.info(`Cleaned text too short: "${cleanedText}"`);
+        logger.debug(`Cleaned text too short: "${cleanedText}"`);
         return { validatedPodcast: null };
       }
       
@@ -265,35 +265,35 @@ class ApplePodcastsService {
       let searchResult;
       if (searchCache.has(cleanedText)) {
         searchResult = searchCache.get(cleanedText);
-        logger.info(`Using cached search results for "${cleanedText}"`);
+        logger.debug(`Using cached search results for "${cleanedText}"`);
       } else {
         searchResult = await this.searchMultiplePodcasts(cleanedText);
         searchCache.set(cleanedText, searchResult);
-        logger.info(`Cached search results for "${cleanedText}"`);
+        logger.debug(`Cached search results for "${cleanedText}"`);
       }
       
       const candidates = searchResult.podcasts || [];
-      logger.info(`Found ${candidates.length} podcast candidates for "${cleanedText}"`);
+      logger.debug(`Found ${candidates.length} podcast candidates for "${cleanedText}"`);
       
       // Step 3: Check if any candidates have .85 or greater similarity score
       const highConfidenceCandidates = candidates.filter(candidate => candidate.confidence >= 0.85);
       
       if (highConfidenceCandidates.length === 0) {
-        logger.info(`No candidates with confidence >= 0.85 for "${cleanedText}"`);
+        logger.debug(`No candidates with confidence >= 0.85 for "${cleanedText}"`);
         return { validatedPodcast: null };
       }
       
-      logger.info(`Found ${highConfidenceCandidates.length} high-confidence candidates`);
+      logger.debug(`Found ${highConfidenceCandidates.length} high-confidence candidates`);
       
       // Step 4: Do an episode search for each candidate with .85 or greater similarity score
       for (const candidate of highConfidenceCandidates) {
-        logger.info(`Testing candidate: "${candidate.title}" (confidence: ${candidate.confidence.toFixed(3)})`);
+        logger.debug(`Testing candidate: "${candidate.title}" (confidence: ${candidate.confidence.toFixed(3)})`);
         
         // Try episode search (combines exact and fuzzy search)
-        logger.info(`Searching for episode "${episodeTitle}" in candidate "${candidate.title}"`);
+        logger.debug(`Searching for episode "${episodeTitle}" in candidate "${candidate.title}"`);
         const episodeResult = await this.fuzzySearchEpisodeInPodcast(candidate, episodeTitle);
         if (episodeResult?.validatedEpisode) {
-          logger.info(`Episode found in candidate "${candidate.title}": "${episodeResult.validatedEpisode.title}" (confidence: ${episodeResult.validatedEpisode.confidence.toFixed(3)})`);
+          logger.debug(`Episode found in candidate "${candidate.title}": "${episodeResult.validatedEpisode.title}" (confidence: ${episodeResult.validatedEpisode.confidence.toFixed(3)})`);
           return {
             validatedPodcast: {
               id: candidate.id,
@@ -307,10 +307,10 @@ class ApplePodcastsService {
           };
         }
         
-        logger.info(`No episode found in candidate "${candidate.title}" for episode "${episodeTitle}"`);
+        logger.debug(`No episode found in candidate "${candidate.title}" for episode "${episodeTitle}"`);
       }
       
-      logger.info(`No valid episodes found in any high-confidence candidates`);
+      logger.debug(`No valid episodes found in any high-confidence candidates`);
       return { validatedPodcast: null };
       
     } catch (error) {
@@ -321,23 +321,23 @@ class ApplePodcastsService {
 
   async fuzzySearchPodcastPhase2(podcastTitle, episodeTitle, searchCache = new Map()) {
     try {
-      logger.info(`Phase 2: Fuzzy search with middle words for "${podcastTitle}"`);
+      logger.debug(`Phase 2: Fuzzy search with middle words for "${podcastTitle}"`);
       
       // Step 1: Using the cleaned up text, remove the first and last word
       const cleanedText = this.cleanPodcastText(podcastTitle);
       const words = cleanedText.split(/\s+/).filter(word => word.length > 0);
       
       if (words.length < 3) {
-        logger.info(`Not enough words for Phase 2: "${cleanedText}" (${words.length} words)`);
+        logger.debug(`Not enough words for Phase 2: "${cleanedText}" (${words.length} words)`);
         return { validatedPodcast: null };
       }
       
       // Remove first and last word
       const middleWords = words.slice(1, -1).join(' ');
-      logger.info(`Middle words: "${middleWords}"`);
+      logger.debug(`Middle words: "${middleWords}"`);
       
       if (!middleWords || middleWords.length < 3) {
-        logger.info(`Middle words too short: "${middleWords}"`);
+        logger.debug(`Middle words too short: "${middleWords}"`);
         return { validatedPodcast: null };
       }
       
@@ -345,35 +345,35 @@ class ApplePodcastsService {
       let searchResult;
       if (searchCache.has(middleWords)) {
         searchResult = searchCache.get(middleWords);
-        logger.info(`Using cached search results for middle words "${middleWords}"`);
+        logger.debug(`Using cached search results for middle words "${middleWords}"`);
       } else {
         searchResult = await this.searchMultiplePodcasts(middleWords);
         searchCache.set(middleWords, searchResult);
-        logger.info(`Cached search results for middle words "${middleWords}"`);
+        logger.debug(`Cached search results for middle words "${middleWords}"`);
       }
       
       const candidates = searchResult.podcasts || [];
-      logger.info(`Found ${candidates.length} podcast candidates for middle words "${middleWords}"`);
+      logger.debug(`Found ${candidates.length} podcast candidates for middle words "${middleWords}"`);
       
       // Step 3: Check if any candidates have .85 or greater similarity score
       const highConfidenceCandidates = candidates.filter(candidate => candidate.confidence >= 0.85);
       
       if (highConfidenceCandidates.length === 0) {
-        logger.info(`No candidates with confidence >= 0.85 for middle words "${middleWords}"`);
+        logger.debug(`No candidates with confidence >= 0.85 for middle words "${middleWords}"`);
         return { validatedPodcast: null };
       }
       
-      logger.info(`Found ${highConfidenceCandidates.length} high-confidence candidates for middle words`);
+      logger.debug(`Found ${highConfidenceCandidates.length} high-confidence candidates for middle words`);
       
       // Step 4: Do an episode search for each candidate with .85 or greater similarity score
       for (const candidate of highConfidenceCandidates) {
-        logger.info(`Testing candidate: "${candidate.title}" (confidence: ${candidate.confidence.toFixed(3)})`);
+        logger.debug(`Testing candidate: "${candidate.title}" (confidence: ${candidate.confidence.toFixed(3)})`);
         
         // Try episode search (combines exact and fuzzy search)
-        logger.info(`Searching for episode "${episodeTitle}" in candidate "${candidate.title}"`);
+        logger.debug(`Searching for episode "${episodeTitle}" in candidate "${candidate.title}"`);
         const episodeResult = await this.fuzzySearchEpisodeInPodcast(candidate, episodeTitle);
         if (episodeResult?.validatedEpisode) {
-          logger.info(`Episode found in candidate "${candidate.title}": "${episodeResult.validatedEpisode.title}" (confidence: ${episodeResult.validatedEpisode.confidence.toFixed(3)})`);
+          logger.debug(`Episode found in candidate "${candidate.title}": "${episodeResult.validatedEpisode.title}" (confidence: ${episodeResult.validatedEpisode.confidence.toFixed(3)})`);
           return {
             validatedPodcast: {
               id: candidate.id,
@@ -387,10 +387,10 @@ class ApplePodcastsService {
           };
         }
         
-        logger.info(`No episode found in candidate "${candidate.title}" for episode "${episodeTitle}"`);
+        logger.debug(`No episode found in candidate "${candidate.title}" for episode "${episodeTitle}"`);
       }
       
-      logger.info(`No valid episodes found in any high-confidence candidates for middle words`);
+      logger.debug(`No valid episodes found in any high-confidence candidates for middle words`);
       return { validatedPodcast: null };
       
     } catch (error) {
@@ -402,7 +402,7 @@ class ApplePodcastsService {
   cleanPodcastText(text) {
     if (!text) return '';
     
-    logger.info(`Cleaning podcast text: "${text}"`);
+    logger.debug(`Cleaning podcast text: "${text}"`);
     
     // Remove punctuation and normalize
     let cleaned = text.toLowerCase().trim();
@@ -423,14 +423,14 @@ class ApplePodcastsService {
     // Join back together
     cleaned = words.join(' ');
     
-    logger.info(`Cleaned podcast text: "${text}" → "${cleaned}"`);
+    logger.debug(`Cleaned podcast text: "${text}" → "${cleaned}"`);
     
     return cleaned;
   }
 
   async fuzzySearchEpisodeInPodcast(podcast, episodeTitle) {
     try {
-      logger.info(`Fuzzy searching for episode "${episodeTitle}" in podcast "${podcast.title}"`);
+      logger.debug(`Fuzzy searching for episode "${episodeTitle}" in podcast "${podcast.title}"`);
       
       // Get all episodes for this podcast (cache per podcast ID to avoid refetching)
       let allEpisodes;
@@ -438,25 +438,25 @@ class ApplePodcastsService {
       
       if (this.episodeCache.has(cacheKey)) {
         allEpisodes = this.episodeCache.get(cacheKey);
-        logger.info(`Using cached episodes for podcast ${podcast.id} (${allEpisodes.length} episodes)`);
+        logger.debug(`Using cached episodes for podcast ${podcast.id} (${allEpisodes.length} episodes)`);
       } else {
         const episodesResult = await this.searchEpisodes(podcast.id, null);
         allEpisodes = episodesResult.episodes || [];
         this.episodeCache.set(cacheKey, allEpisodes);
-        logger.info(`Cached episodes for podcast ${podcast.id} (${allEpisodes.length} episodes)`);
+        logger.debug(`Cached episodes for podcast ${podcast.id} (${allEpisodes.length} episodes)`);
       }
       
       if (!allEpisodes || allEpisodes.length === 0) {
-        logger.info(`No episodes found for podcast "${podcast.title}"`);
+        logger.debug(`No episodes found for podcast "${podcast.title}"`);
         return { validatedEpisode: null };
       }
       
-      logger.info(`Found ${allEpisodes.length} episodes for fuzzy search`);
+      logger.debug(`Found ${allEpisodes.length} episodes for fuzzy search`);
       
       // First, try exact match with the cached episodes
       const exactMatch = this.findExactEpisodeMatch(episodeTitle, allEpisodes);
       if (exactMatch) {
-        logger.info(`Exact episode match found: "${exactMatch.title}"`);
+        logger.debug(`Exact episode match found: "${exactMatch.title}"`);
         return {
           validatedEpisode: {
             id: exactMatch.id,
@@ -477,22 +477,22 @@ class ApplePodcastsService {
       const keywords = this.extractKeywords(episodeTitle);
       
       if (keywords.length === 0) {
-        logger.info(`No keywords extracted from "${episodeTitle}"`);
+        logger.debug(`No keywords extracted from "${episodeTitle}"`);
         return { validatedEpisode: null };
       }
       
-      logger.info(`Fuzzy searching with keywords: [${keywords.join(', ')}] among ${allEpisodes.length} episodes`);
-      logger.info(`Keywords breakdown: ${keywords.length} keywords from "${episodeTitle}"`);
+      logger.debug(`Fuzzy searching with keywords: [${keywords.join(', ')}] among ${allEpisodes.length} episodes`);
+      logger.debug(`Keywords breakdown: ${keywords.length} keywords from "${episodeTitle}"`);
       
       // Log episode count for debugging
-      logger.info(`Processing ${allEpisodes.length} episodes for fuzzy search`);
+      logger.debug(`Processing ${allEpisodes.length} episodes for fuzzy search`);
       
       const allEpisodeScores = allEpisodes.map(episode => {
         // Handle both 'title' and 'trackName' properties from Apple Podcasts API
         const episodeTitle = episode?.title || episode?.trackName;
         
         if (!episode || !episodeTitle) {
-          logger.info(`Filtering out episode:`, { 
+          logger.debug(`Filtering out episode:`, { 
             hasEpisode: !!episode, 
             hasTitle: !!(episode && episode.title),
             hasTrackName: !!(episode && episode.trackName),
@@ -520,7 +520,7 @@ class ApplePodcastsService {
       }).filter(result => result !== null)
         .sort((a, b) => b.score - a.score);
       
-      logger.info(`Top episode matches:`, allEpisodeScores.slice(0, 5).map(e => 
+      logger.debug(`Top episode matches:`, allEpisodeScores.slice(0, 5).map(e => 
         `"${e.title}" (${e.score.toFixed(3)})`
       ));
       
@@ -550,7 +550,7 @@ class ApplePodcastsService {
         
         // Only log episodes with significant matches (50% or higher) to reduce noise
         if (matchScore >= 0.5) {
-          logger.info(`High match episode: "${episodeTitle}" - Score: ${matchScore.toFixed(2)}, Exact: [${exactMatches.join(', ')}], Partial: [${partialMatches.filter(k => !exactMatches.includes(k)).join(', ')}]`);
+          logger.debug(`High match episode: "${episodeTitle}" - Score: ${matchScore.toFixed(2)}, Exact: [${exactMatches.join(', ')}], Partial: [${partialMatches.filter(k => !exactMatches.includes(k)).join(', ')}]`);
         }
         
         return {
@@ -581,13 +581,13 @@ class ApplePodcastsService {
         
         // Log if there were multiple candidates with the same score
         if (matchingEpisodes.length > 1 && matchingEpisodes[1].matchScore === bestMatch.matchScore) {
-          logger.info(`Tie detected! Multiple episodes with score ${bestMatch.matchScore.toFixed(2)}. Selected newest: "${bestMatch.episode.title}" (${bestMatch.episode.releaseDate || 'no date'})`);
-          logger.info(`Other candidates with same score:`, matchingEpisodes.slice(1, 4).map(m => 
+          logger.debug(`Tie detected! Multiple episodes with score ${bestMatch.matchScore.toFixed(2)}. Selected newest: "${bestMatch.episode.title}" (${bestMatch.episode.releaseDate || 'no date'})`);
+          logger.debug(`Other candidates with same score:`, matchingEpisodes.slice(1, 4).map(m => 
             `"${m.episode.title}" (${m.episode.releaseDate || 'no date'})`
           ));
         }
         
-        logger.info(`Best fuzzy match: "${bestMatch.episode.title}" (score: ${bestMatch.matchScore.toFixed(2)}, exact: ${bestMatch.exactMatches}, partial: ${bestMatch.partialMatches})`);
+        logger.debug(`Best fuzzy match: "${bestMatch.episode.title}" (score: ${bestMatch.matchScore.toFixed(2)}, exact: ${bestMatch.exactMatches}, partial: ${bestMatch.partialMatches})`);
         
         return {
           validatedEpisode: {
@@ -605,7 +605,7 @@ class ApplePodcastsService {
         };
       }
       
-      logger.info(`No episodes found with match score >= 0.00001`);
+      logger.debug(`No episodes found with match score >= 0.00001`);
       return { validatedEpisode: null };
       
     } catch (error) {
@@ -666,17 +666,17 @@ class ApplePodcastsService {
 
   async searchEpisode(episodeTitle, podcastId) {
     try {
-      logger.info(`Searching for episode: "${episodeTitle}" in podcast ${podcastId}`);
+      logger.debug(`Searching for episode: "${episodeTitle}" in podcast ${podcastId}`);
       
       if (!podcastId) {
-        logger.info(`No podcast ID provided for episode search`);
+        logger.debug(`No podcast ID provided for episode search`);
         return { validatedEpisode: null };
       }
 
       const searchTerm = encodeURIComponent(episodeTitle);
       const url = `${this.baseUrl}/lookup?id=${podcastId}&entity=podcastEpisode&limit=200`;
 
-      logger.info(`Episode search URL: ${url}`);
+      logger.debug(`Episode search URL: ${url}`);
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -686,24 +686,24 @@ class ApplePodcastsService {
       const data = await response.json();
       const results = data.results || [];
 
-      logger.info(`Episode search returned ${results.length} episodes for podcast ${podcastId}`);
+      logger.debug(`Episode search returned ${results.length} episodes for podcast ${podcastId}`);
 
       if (results.length === 0) {
-        logger.info(`No episodes found for podcast ${podcastId}`);
+        logger.debug(`No episodes found for podcast ${podcastId}`);
         return { validatedEpisode: null };
       }
 
       // Find the best match with improved logic for truncated titles
       const bestMatch = this.findBestMatch(episodeTitle, results);
       
-      logger.info(`Best episode match for "${episodeTitle}": "${bestMatch?.result?.trackName || 'none'}" (similarity: ${bestMatch?.similarity?.toFixed(3) || 'undefined'})`);
+      logger.debug(`Best episode match for "${episodeTitle}": "${bestMatch?.result?.trackName || 'none'}" (similarity: ${bestMatch?.similarity?.toFixed(3) || 'undefined'})`);
       
       // NEW: Much lower threshold for episode validation to handle truncated titles
       // Also check for substring matches which are common with truncated episode titles
       const threshold = 0.2; // Lowered from 0.4 to handle more truncated titles
       
       if (bestMatch && bestMatch.similarity > threshold) {
-        logger.info(`Episode validation SUCCESS: "${episodeTitle}" → "${bestMatch.result.trackName}" (similarity: ${bestMatch.similarity.toFixed(3)} >= ${threshold})`);
+        logger.debug(`Episode validation SUCCESS: "${episodeTitle}" → "${bestMatch.result.trackName}" (similarity: ${bestMatch.similarity.toFixed(3)} >= ${threshold})`);
         return {
           validatedEpisode: {
             id: bestMatch.result.trackId,
@@ -716,7 +716,7 @@ class ApplePodcastsService {
         };
       }
 
-      logger.info(`Episode validation FAILED: "${episodeTitle}" (similarity: ${bestMatch?.similarity?.toFixed(3) || 'undefined'} < ${threshold})`);
+      logger.debug(`Episode validation FAILED: "${episodeTitle}" (similarity: ${bestMatch?.similarity?.toFixed(3) || 'undefined'} < ${threshold})`);
       return { validatedEpisode: null };
 
     } catch (error) {
@@ -744,7 +744,7 @@ class ApplePodcastsService {
       const data = await response.json();
       const results = data.results || [];
 
-      logger.info(`Apple Podcasts lookup returned ${results.length} episodes for podcast ${podcastId}`);
+      logger.debug(`Apple Podcasts lookup returned ${results.length} episodes for podcast ${podcastId}`);
 
       if (results.length === 0) {
         return { episodes: [] };
@@ -779,10 +779,10 @@ class ApplePodcastsService {
   // NEW: Add the missing searchEpisodes function
   async searchEpisodes(podcastId, episodeTitle) {
     try {
-      logger.info(`Searching episodes for podcastId: ${podcastId}, episodeTitle: ${episodeTitle}`);
+      logger.debug(`Searching episodes for podcastId: ${podcastId}, episodeTitle: ${episodeTitle}`);
       
       if (!podcastId) {
-        logger.info('No podcastId provided, returning empty episodes array');
+        logger.debug('No podcastId provided, returning empty episodes array');
         return { episodes: [] };
       }
 
@@ -796,7 +796,7 @@ class ApplePodcastsService {
       const data = await response.json();
       const results = data.results || [];
 
-      logger.info(`Found ${results.length} episodes for podcast ${podcastId}`);
+      logger.debug(`Found ${results.length} episodes for podcast ${podcastId}`);
 
       // If episodeTitle is provided, filter and rank by similarity
       if (episodeTitle) {
@@ -808,7 +808,7 @@ class ApplePodcastsService {
           .filter(episode => episode.similarity > 0.3) // Filter out very low matches
           .sort((a, b) => b.similarity - a.similarity);
 
-        logger.info(`Filtered to ${rankedEpisodes.length} episodes matching "${episodeTitle}"`);
+        logger.debug(`Filtered to ${rankedEpisodes.length} episodes matching "${episodeTitle}"`);
         return { episodes: rankedEpisodes };
       }
 
@@ -828,7 +828,7 @@ class ApplePodcastsService {
     let bestMatch = null;
     let bestSimilarity = 0;
 
-    logger.info(`Finding best match for "${searchTerm}" among ${results.length} results`);
+    logger.debug(`Finding best match for "${searchTerm}" among ${results.length} results`);
 
     for (const result of results) {
       const title = result.collectionName || result.trackName || '';
@@ -839,7 +839,7 @@ class ApplePodcastsService {
         bestMatch = { result, similarity };
         // Only log when we find a new best match, and only if similarity is significant
         if (similarity > 0.1) {
-          logger.info(`  → New best match: "${title}" (similarity: ${similarity.toFixed(3)})`);
+          logger.debug(`  → New best match: "${title}" (similarity: ${similarity.toFixed(3)})`);
         }
       }
     }
@@ -850,11 +850,11 @@ class ApplePodcastsService {
       const firstResult = results[0];
       const title = firstResult.collectionName || firstResult.trackName || '';
       bestMatch = { result: firstResult, similarity: 0 };
-      logger.info(`  → Using first result as fallback: "${title}" (similarity: 0.000)`);
+      logger.debug(`  → Using first result as fallback: "${title}" (similarity: 0.000)`);
     }
 
     if (bestMatch && bestMatch.similarity > 0.1) {
-      logger.info(`Final best match: "${bestMatch.result.collectionName || bestMatch.result.trackName}" (similarity: ${bestMatch.similarity.toFixed(3)})`);
+      logger.debug(`Final best match: "${bestMatch.result.collectionName || bestMatch.result.trackName}" (similarity: ${bestMatch.similarity.toFixed(3)})`);
     }
     return bestMatch;
   }
@@ -925,7 +925,7 @@ class ApplePodcastsService {
     try {
       const url = `${this.baseUrl}/lookup?id=${podcastId}`;
       
-      logger.info(`Getting podcast details for ID: ${podcastId}`);
+      logger.debug(`Getting podcast details for ID: ${podcastId}`);
       
       const response = await fetch(url);
       if (!response.ok) {
@@ -970,7 +970,7 @@ class ApplePodcastsService {
         episodes.find(e => normalizeTitle(e.trackName) === title);
 
       if (!match?.episodeUrl) {
-        logger.info(`Episode "${episode.title}" not found in Apple episode data`);
+        logger.debug(`Episode "${episode.title}" not found in Apple episode data`);
         return null;
       }
       return match.episodeUrl;
@@ -985,8 +985,8 @@ class ApplePodcastsService {
     try {
       if (!feedUrl || !episodeTitle) return null;
 
-      logger.info(`Parsing RSS feed for episode: "${episodeTitle}"`);
-      logger.info(`RSS feed URL: ${feedUrl}`);
+      logger.debug(`Parsing RSS feed for episode: "${episodeTitle}"`);
+      logger.debug(`RSS feed URL: ${feedUrl}`);
       
       // Fetch RSS feed
       const response = await fetch(feedUrl);
@@ -995,7 +995,7 @@ class ApplePodcastsService {
       }
 
       const rssText = await response.text();
-      logger.info(`RSS feed fetched successfully, length: ${rssText.length} characters`);
+      logger.debug(`RSS feed fetched successfully, length: ${rssText.length} characters`);
       
       // Parse XML
       const parser = new xml2js.Parser();
@@ -1007,7 +1007,7 @@ class ApplePodcastsService {
       }
 
       const episodes = result.rss.channel[0].item;
-      logger.info(`Found ${episodes.length} episodes in RSS feed`);
+      logger.debug(`Found ${episodes.length} episodes in RSS feed`);
       
       // Find the episode matching the title: an exact match if there is one,
       // otherwise the most similar title above the 70% threshold
@@ -1032,7 +1032,7 @@ class ApplePodcastsService {
         
         // Log first few episode titles for debugging
         const firstFew = episodes.slice(0, 5).map(ep => ep.title?.[0] || 'No title');
-        logger.info('First few episode titles:', firstFew);
+        logger.debug('First few episode titles:', firstFew);
         
         return null;
       }
@@ -1048,8 +1048,8 @@ class ApplePodcastsService {
       const audioType = enclosure.$.type || 'unknown';
       const audioLength = enclosure.$.length || 'unknown';
       
-      logger.info(`Found audio URL: ${audioUrl.substring(0, 100)}...`);
-      logger.info(`Audio type: ${audioType}, length: ${audioLength} bytes`);
+      logger.debug(`Found audio URL: ${audioUrl.substring(0, 100)}...`);
+      logger.debug(`Audio type: ${audioType}, length: ${audioLength} bytes`);
       
       return audioUrl;
     } catch (error) {
@@ -1060,7 +1060,7 @@ class ApplePodcastsService {
 
   clearEpisodeCache() {
     this.episodeCache.clear();
-    logger.info('Episode cache cleared after all searches complete.');
+    logger.debug('Episode cache cleared after all searches complete.');
   }
 }
 
