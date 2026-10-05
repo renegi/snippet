@@ -45,6 +45,12 @@ for (const [image, want] of Object.entries(expected)) {
     // Episodes that are no longer in the catalog must not be replaced by a look-alike
     if (want.replay?.result === 'not_found') {
       assert.strictEqual(result.validation.validated, false, `got "${result.podcastTitle}" / "${result.episodeTitle}"`);
+      if (want.replay.suggests) { // ...but the picker offers the likely episode
+        const offered = result.validation.suggestions.map(option => option.episode.title);
+        assert.ok(offered.some(title => normalize(title).includes(normalize(want.replay.suggests))),
+          `suggestions: ${offered.join(' | ')}`);
+        assert.strictEqual(result.validation.needsConfirmation, true);
+      }
       return;
     }
     assert.ok(normalize(result.podcastTitle).includes(normalize(want.podcast)),

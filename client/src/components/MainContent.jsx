@@ -306,6 +306,11 @@ const MainContent = ({
                   <div className="self-stretch relative text-xs leading-[130%] font-medium">
                     {screenshot.podcastInfo?.timestamp}
                   </div>
+                  {screenshot.podcastInfo?.needsEpisodeChoice && (
+                    <div className="w-[261px] relative text-xs leading-[130%] font-bold text-[#BE3E37]">
+                      Tap to choose the episode
+                    </div>
+                  )}
                 </div>
               </div>
             );
