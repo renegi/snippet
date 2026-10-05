@@ -123,9 +123,8 @@ Snippet uses OCR (Optical Character Recognition) to detect podcast and episode t
 
 1. Import the repository in Vercel (leave the root directory as the repo root; `vercel.json` sets the install, build and output settings).
 2. Add environment variables:
-   - `GOOGLE_APPLICATION_CREDENTIALS_BASE64` (base64-encoded service account JSON)
+   - `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY` and `GOOGLE_CLOUD_PROJECT_ID` (or `GOOGLE_APPLICATION_CREDENTIALS_BASE64` with the whole base64-encoded service account JSON)
    - `ASSEMBLYAI_API_KEY`
-   - `GOOGLE_CLOUD_PROJECT_ID` (optional; read from the credentials if omitted)
 3. Deploy.
 
 Screenshots are uploaded one per request and re-encoded in the browser only when needed, to stay under Vercel's 4.5MB request limit.
