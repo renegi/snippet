@@ -22,13 +22,15 @@ The request flow, with file pointers:
    - `extractTimestamp` (`vision/timestamp.js`): picks the time on the same row as the remaining time (`15:14 … -15:36`), falling back to the lowest time on screen.
    - `extractPlayback` (`vision/timestamp.js`): elapsed + remaining time = the episode's length (`durationSeconds`), used as a matching signal.
 5. **`validateCandidates`** (`vision/validation.js`) runs the resolver and shapes the API result. Besides the podcast/episode it reports `method`, `signals` (name/title/duration scores), `ambiguous`, `alternatives` (runner-up episodes, for a future "did you mean" picker), `appleRequests` and `rateLimited`.
-6. **Resolver** (`services/matching/resolver.js`) scores combinations instead of returning the first success. It doesn't decide in advance which line is the podcast: it tries each line (up to 4) as a podcast name, fetches the episodes of up to 3 matching podcasts, and scores every episode against the *other* lines. Each (podcast, episode) gets three signals, combined into one score:
+6. **Resolver** (`services/matching/resolver.js`) scores combinations instead of returning the first success. It doesn't decide in advance which line is the podcast: it searches each line (up to 4) as a podcast name (50 results each), scores every result's name against *all* lines, and fetches the episodes of up to 3 podcasts **in order of fit**, scoring every episode against the other lines. Many shows share a name (a dozen are called exactly "Another Podcast"), so ties are broken by a screen line naming the host/publisher (Apple's `artistName`) and by being Apple's first result (its most popular fit). An exact, unrivalled name is checked straight away, which usually ends the search after 2 requests. Each (podcast, episode) gets three signals, combined into one score:
    - **name** (`nameScore`): screen line vs podcast name, both directions, so artwork text merged into the line or a cut-off name still match.
    - **title** (`titleScore`): screen line vs episode title. The first and last screen words may be partial words, because players truncate titles and lock-screen marquees show a window from the middle.
    - **duration** (`durationScore`): the player's length vs Apple's `trackTimeMillis`, with tolerance for ads inserted per listener. It separates same-prefix titles ("Never Been Loved" vs "Never Been Kissed") and rejects wrong recent episodes.
    - Sources, in order: Apple's 200 most recent episodes; then the top podcast's **RSS feed** (full back catalog, not rate-limited by Apple); then Apple's **episode search**, which finds the podcast from the episode title, with the podcast name confirmed by another screen line. Last resorts: the podcast with "Unknown Episode", or "Episode not found".
-   - Acceptance: title ≥ 0.6 (unless the length clearly disagrees), or title ≥ 0.4 with a matching length. Two different episodes within 0.05 of each other set `ambiguous`.
-7. **Apple access** (`services/matching/appleCatalog.js`): one instance per screenshot; every URL is fetched at most once, requests are counted, and HTTP 403/429 sets `rateLimited` instead of passing as "not found". Typically 2–4 Apple requests per screenshot (previously 5 on a first-try match, 17–22 on a miss). `text.js` normalizes accents, so "Edición" equals "Edicion".
+   - Acceptance: title ≥ 0.85 whatever the length (it still lowers the score); title ≥ 0.6 with a roughly matching length (≥ 0.7 if the player shows no length); or title ≥ 0.55 with a closely matching length. Looser rules returned look-alike episodes ("…the labor market" for "…the labor market tea leaves") when the real one had left the catalog. Two different episodes within 0.05 of each other set `ambiguous`.
+   - Podcast-only results need an exact name (≥ 0.95) that is unique, Apple's first result, or confirmed by a host line. Otherwise the answer is "not found": a wrong podcast is worse than none.
+   - `nameScore` treats a catalog name that starts the screen line as a match ("Good One: A Podcast About Jokes" is "Good One" in Apple) and penalizes extra words in front ("Not Another Podcast").
+7. **Apple access** (`services/matching/appleCatalog.js`): one instance per screenshot; every URL is fetched at most once, requests are counted, and HTTP 403/429 sets `rateLimited` instead of passing as "not found". Typically 2–4 Apple requests per screenshot, up to 9 on a miss (previously 5 on a first-try match, 17–22 on a miss). `text.js` normalizes accents, so "Edición" equals "Edicion".
 
 `applePodcastsService.js` now only serves the manual search/edit screens and transcript audio lookups.
 
@@ -37,7 +39,7 @@ The request flow, with file pointers:
 - **Run tests:** `cd server && npm test` (Node's built-in runner), all offline:
   - `test/ocr.test.js`: for each fixture, the timestamp, the episode length, and that the expected podcast/episode text are among the candidates. Expectations live in `test/fixtures/screenshots/expected.json`.
   - `test/identification.test.js`: the full pipeline per fixture against a **fake** Apple catalog in Apple's real response shape (`test/fixtures/fakeApple.js`, with decoy titles, look-alike podcasts and an RSS-only episode), plus unit tests for the scoring.
-  - `test/replay.test.js`: the full pipeline against **recorded real** Apple responses (`*.apple.json`); skipped until they're recorded.
+  - `test/replay.test.js`: the full pipeline against **recorded real** Apple responses (`*.apple.json`, recorded October 2026). Three of the five screenshots are from mid-2025 and their episodes have since left Apple's list, the RSS feed and Apple's episode search, so `expected.json` (`replay`) expects the podcast alone or "not found" for them, never a look-alike episode.
   - `test/audioUrl.test.js`: audio-URL lookup with `fetch` stubbed.
 - **Fixtures:** `server/test/fixtures/screenshots/*.jpg`, plus the recorded Vision response next to each image (`*.vision.json`).
 - **Recording new fixtures:** `npm run capture-fixtures`. It needs Google credentials in `server/.env`, so **the owner runs it on their Mac**. Credentials are deliberately *not* put in the cloud environment. Steps:
@@ -57,8 +59,10 @@ Set `DEBUG_LOGS=true` in Vercel's environment variables (Production), redeploy, 
 
 ## Open questions
 
+- **The two failing live screenshots still need adding as fixtures** (`another-podcast.png`, `good-one.jpeg`): they weren't on disk in the October 2026 session, so the fixes were verified live against Apple with the screen text typed in by hand, and are covered by fake-catalog tests. The real OCR lines for the Spotify screenshot are unknown (the live run made 2 episode searches that found nothing, though Apple's episode search returns the episode first for the clean title). Add the images, run `npm run capture-fixtures` and `npm run capture-apple`, and add them to `expected.json`.
+- **Episode search with cut-off words** finds little ("ading the labor market tea"). Dropping partial first/last words didn't help for the aged-out fixtures; worth retrying on a recent episode.
+
 - **Was rate limiting behind the "1 of 2 correct" tests?** The old matcher made up to ~22 Apple requests per screenshot, with two screenshots processed at once, against Apple's ~20/minute. Check the `rateLimited` field in the logs when testing.
-- **Real Apple ranking is still untested.** Record real responses (above) and get the owner's failing screenshots as fixtures.
 - **Players that show total length instead of remaining time** give no duration yet; matching then relies on the title alone.
 - **Thumbnail text and promo cards** still reach the candidates, but they no longer need to be paired correctly: they only lose on score. Overcast ads are still untested.
 - **A leftover hard-coded clock pattern.** `vision/timestamp.js` `hasClockContext` contains `4:30a.m.`, a patch for one screenshot; probably removable.

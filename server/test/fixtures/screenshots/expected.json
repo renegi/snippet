@@ -1,43 +1,70 @@
 {
-  "_note": "Expected results per screenshot. `ocr` lists text the OCR stage must find among its title candidates. Full titles marked confirmed: false still need checking.",
+  "_note": "Expected results per screenshot. `ocr` lists text the OCR stage must find among its title candidates. `replay` is what identification should return against the recorded real Apple responses (*.apple.json) when it isn't the episode: these screenshots are from mid-2025, and some episodes have since dropped out of Apple's 200 most recent, the RSS feed and Apple's episode search. Full titles marked confirmed: false still need checking.",
   "big-picture-science.jpg": {
     "player": "Apple Podcasts (full screen)",
     "podcast": "Big Picture Science",
     "episode": "What Moves Us",
     "timestamp": "16:00",
-    "ocr": { "podcastText": "Big Picture Science", "episodeText": "What Moves Us" },
-    "confirmed": false
+    "ocr": {
+      "podcastText": "Big Picture Science",
+      "episodeText": "What Moves Us"
+    },
+    "confirmed": true
   },
   "football-weekly-lockscreen.jpg": {
     "player": "Lock screen",
     "podcast": "Football Weekly",
     "episode": "…he Club World Cup, U21 glo… (truncated on screen)",
     "timestamp": "15:22",
-    "ocr": { "podcastText": "Football Weekly", "episodeText": "Club World Cup" },
-    "confirmed": false
+    "ocr": {
+      "podcastText": "Football Weekly",
+      "episodeText": "Club World Cup"
+    },
+    "confirmed": false,
+    "replay": {
+      "result": "podcast_only",
+      "why": "Episode from July 2025; Apple's list and the Guardian's feed now start in September 2025. Must not return another World Cup episode."
+    }
   },
   "where-should-we-begin-promo-card.jpg": {
     "player": "Apple Podcasts (full screen, promo card below title)",
     "podcast": "Where Should We Begin? with Esther Perel",
     "episode": "Esther Calling - Never Bee… (truncated on screen)",
     "timestamp": "26:53",
-    "ocr": { "podcastText": "Where Should We Begin", "episodeText": "Esther Calling" },
-    "confirmed": false
+    "ocr": {
+      "podcastText": "Where Should We Begin",
+      "episodeText": "Esther Calling"
+    },
+    "confirmed": false,
+    "replay": {
+      "result": "not_found",
+      "why": "The episode seems to have been retitled without 'Esther Calling - ' (probably 'Never Been In a Long Term Relationship, Scared I Don't Know How To Do This', 30 June 2025, 46:02 vs 50:03 on screen); too weak to accept, and the name is cut off on screen, so no podcast-only result either."
+    }
   },
   "search-engine-lockscreen.jpg": {
     "player": "Lock screen",
     "podcast": "Search Engine",
     "episode": "The Psychic Question",
     "timestamp": "9:23",
-    "ocr": { "podcastText": "Search Engine", "episodeText": "The Psychic Question" },
-    "confirmed": false
+    "ocr": {
+      "podcastText": "Search Engine",
+      "episodeText": "The Psychic Question"
+    },
+    "confirmed": true
   },
   "marketplace-lockscreen.jpg": {
     "player": "Lock screen",
     "podcast": "Marketplace",
     "episode": "…ading the labor market tea l… (truncated on screen)",
     "timestamp": "15:14",
-    "ocr": { "podcastText": "Marketplace", "episodeText": "labor market" },
-    "confirmed": false
+    "ocr": {
+      "podcastText": "Marketplace",
+      "episodeText": "labor market"
+    },
+    "confirmed": false,
+    "replay": {
+      "result": "podcast_only",
+      "why": "Apple and the feed only keep about 50 recent episodes. Must not return another labor-market episode."
+    }
   }
 }
