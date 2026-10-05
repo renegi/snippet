@@ -103,6 +103,8 @@ function titleScore(screenText, title) {
   return screenCoverage * (0.85 + 0.15 * titleCoverage);
 }
 
+const ARTICLES = new Set(['the', 'a', 'an']);
+
 // Score (0-1) for screen text against a podcast name. Names are usually shown in full, but
 // may be cut off or have artwork text merged in, so both directions count.
 function nameScore(screenText, name) {
@@ -111,8 +113,26 @@ function nameScore(screenText, name) {
   if (!a || !b) return 0;
   if (a === b) return 1;
   const { screenCoverage, titleCoverage } = align(screenText, name);
-  return 0.6 * screenCoverage + 0.4 * titleCoverage;
+  let score = 0.6 * screenCoverage + 0.4 * titleCoverage;
+
+  const screen = a.split(' ');
+  const words = b.split(' ');
+  // Players may add a subtitle the catalog name lacks: "Good One: A Podcast About Jokes" is
+  // "Good One" in Apple's catalog. Very short names are too common as openings to count.
+  if (words.length < screen.length && words.every((word, i) => word === screen[i]) && b.replace(/ /g, '').length >= 6) {
+    score = Math.max(score, 0.8);
+  }
+  // Screens cut names off at the end, not the start, so a catalog name with extra words in
+  // front ("Not Another Podcast" for "Another Podcast") is probably a different show.
+  if (!ARTICLES.has(words[0]) && !screen.includes(words[0]) && words.indexOf(screen[0]) > 0) {
+    score *= 0.9;
+  }
+  return score;
 }
+
+// How much of the screen text (0-1) is made up of the name's words. Artwork often repeats
+// parts of the podcast name ("search", "engine") as separate lines.
+const containedIn = (screenText, name) => align(screenText, name).screenCoverage;
 
 // Search terms for screen text: normalized, without single letters and repeated words
 // (artwork text often repeats the podcast name on the same line).
@@ -121,4 +141,4 @@ function searchTerms(text) {
   return [...new Set(words)].join(' ');
 }
 
-module.exports = { normalize, tokenize, levenshtein, titleScore, nameScore, searchTerms };
+module.exports = { normalize, tokenize, levenshtein, titleScore, nameScore, containedIn, searchTerms };

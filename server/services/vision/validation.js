@@ -18,6 +18,52 @@ const podcastInfo = (podcast, confidence) => ({
   confidence: round(confidence)
 });
 
+const episodeInfo = (episode, confidence) => ({
+  id: episode.id,
+  title: episode.title,
+  description: episode.description,
+  duration: episode.durationSeconds ? episode.durationSeconds * 1000 : undefined,
+  releaseDate: episode.releaseDate,
+  artworkUrl: episode.artworkUrl,
+  confidence: round(confidence)
+});
+
+const MAX_SUGGESTIONS = 5;
+
+// The likeliest episodes, for the client's "which episode is this?" picker. Each entry has
+// the podcast and episode in the same shape as validatedPodcast / validatedEpisode, so the
+// client can use the one the user picks as the result.
+function suggestEpisodes(matches, preferredPodcastId) {
+  const seen = new Set();
+  return matches
+    // Something has to point at the episode: some of the title, or a closely matching length
+    .filter(m => m.title >= 0.15 || m.duration >= 0.8)
+    .filter(m => preferredPodcastId == null || m.podcast.collectionId === preferredPodcastId)
+    .filter(m => {
+      const key = `${m.podcast.collectionId}:${m.episode.title}`;
+      return seen.has(key) ? false : seen.add(key);
+    })
+    .slice(0, MAX_SUGGESTIONS)
+    .map(m => ({
+      podcast: podcastInfo(m.podcast, m.name),
+      episode: episodeInfo(m.episode, m.title),
+      score: round(m.total)
+    }));
+}
+
+// The release date of the oldest episode we could see for a podcast (ISO string, or null).
+// Apple lists at most 200 episodes and many feeds keep fewer, so anything older can't be
+// identified; the picker tells the user where that line is.
+function oldestEpisodeDate(matches, podcastId) {
+  let oldest = null;
+  for (const m of matches) {
+    if (m.podcast.collectionId !== podcastId) continue;
+    const time = Date.parse(m.episode.releaseDate);
+    if (!Number.isNaN(time) && (oldest == null || time < oldest)) oldest = time;
+  }
+  return oldest == null ? null : new Date(oldest).toISOString();
+}
+
 module.exports = {
   async validateCandidates(candidates, playback = {}, catalog) {
     const result = await resolve(candidates, playback, catalog);
@@ -54,15 +100,11 @@ module.exports = {
           podcastCandidate: match.podcastLine,
           episodeCandidate: match.episodeLine,
           validatedPodcast: podcastInfo(match.podcast, match.name),
-          validatedEpisode: {
-            id: match.episode.id,
-            title: match.episode.title,
-            description: match.episode.description,
-            duration: match.episode.durationSeconds ? match.episode.durationSeconds * 1000 : undefined,
-            releaseDate: match.episode.releaseDate,
-            artworkUrl: match.episode.artworkUrl,
-            confidence: round(match.title)
-          },
+          validatedEpisode: episodeInfo(match.episode, match.title),
+          // A guess between near-equal episodes: the client asks the user to pick
+          needsConfirmation: ambiguous,
+          suggestions: ambiguous ? suggestEpisodes(result.matches) : [],
+          oldestEpisodeDate: oldestEpisodeDate(result.matches, match.podcast.collectionId),
           // Other likely episodes, e.g. for letting the user pick when `ambiguous`
           alternatives: result.matches
             .filter(m => m !== match && m.total >= match.total - 0.2)
@@ -81,6 +123,7 @@ module.exports = {
 
     if (result.podcast) {
       const { podcast, name } = result.podcast;
+      const suggestions = suggestEpisodes(result.matches, podcast.collectionId);
       return {
         podcastTitle: podcast.collectionName,
         episodeTitle: 'Unknown Episode',
@@ -92,17 +135,30 @@ module.exports = {
           podcastCandidate: result.podcast.line.text,
           validatedPodcast: podcastInfo(podcast, name),
           validatedEpisode: null,
+          needsConfirmation: suggestions.length > 0,
+          suggestions,
+          oldestEpisodeDate: oldestEpisodeDate(result.matches, podcast.collectionId),
           ...diagnostics
         }
       };
     }
 
+    // Nothing certain, but the best-fitting podcast's closest episodes may include the right one
+    const likeliest = result.hypotheses[0];
+    const suggestions = likeliest ? suggestEpisodes(result.matches, likeliest.podcast.collectionId) : [];
     return {
       podcastTitle: 'Episode not found',
       episodeTitle: 'Episode not found',
       confidence: 0,
       player: 'unvalidated',
-      validation: { validated: false, method: result.method, ...diagnostics }
+      validation: {
+        validated: false,
+        method: result.method,
+        needsConfirmation: suggestions.length > 0,
+        suggestions,
+        oldestEpisodeDate: likeliest ? oldestEpisodeDate(result.matches, likeliest.podcast.collectionId) : null,
+        ...diagnostics
+      }
     };
   }
 };

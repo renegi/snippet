@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import TimeRangeSelection from './TimeRangeSelection';
 import ScreenshotEditModal from './ScreenshotEditModal';
+import EpisodePickerModal from './EpisodePickerModal';
 import { processScreenshot, getTranscript } from '../services/api';
 
 // How many screenshots to send at once (each one triggers several Apple Podcasts lookups)
@@ -34,7 +35,22 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   // Removed showNewUI state since we only use the new UI now
   const [processedEpisodeCount, setProcessedEpisodeCount] = useState(0); // Track how many episodes have been processed
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [selectedScreenshotIndex, setSelectedScreenshotIndex] = useState(null);
+
+  // A screenshot whose episode the server couldn't pin down, with likely episodes to pick from
+  const needsEpisodeChoice = (item) =>
+    !!item?.validation?.needsConfirmation && item.validation.suggestions?.length > 0;
+
+  // Once processing finishes, ask about the first unsure screenshot the user hasn't seen yet
+  useEffect(() => {
+    if (isProcessing || isEditModalOpen || isPickerOpen || !podcastInfo?.data) return;
+    const index = podcastInfo.data.findIndex(item => needsEpisodeChoice(item) && !item.choiceDismissed);
+    if (index >= 0) {
+      setSelectedScreenshotIndex(index);
+      setIsPickerOpen(true);
+    }
+  }, [isProcessing, isEditModalOpen, isPickerOpen, podcastInfo]);
 
 
   // Process initial files when component mounts
@@ -292,9 +308,13 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           });
         }
         
-        const finalEpisodeTitle = dataItem.episodeTitle ||
+        // The podcast alone, or nothing, was found: the user has to choose the episode
+        const episodeMissing = !hasError && hasAnyData && !dataItem.validation.validatedEpisode;
+
+        const finalEpisodeTitle = episodeMissing ? 'Unidentified episode' : (
+                                 dataItem.episodeTitle ||
                                  dataItem.validation?.validatedEpisode?.title || 
-                                 (hasError ? 'Extraction failed' : `Episode ${index + 1}`);
+                                 (hasError ? 'Extraction failed' : `Episode ${index + 1}`));
         
         const finalTimestamp = dataItem.timestamp ||
                               '0:00';
@@ -311,6 +331,8 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           episodeTitle: finalEpisodeTitle,
           timestamp: finalTimestamp,
           podcastArtwork: finalArtwork,
+          needsEpisodeChoice: episodeMissing || needsEpisodeChoice(dataItem),
+          episodeMissing,
           hasError: hasError || !hasAnyData
         };
       })() : {
@@ -324,6 +346,28 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
   // Modal handlers
   const handleScreenshotClick = (index) => {
     setSelectedScreenshotIndex(index);
+    if (needsEpisodeChoice(podcastInfo?.data?.[index])) {
+      setIsPickerOpen(true);
+    } else {
+      setIsEditModalOpen(true);
+    }
+  };
+
+  // Closing the picker without choosing keeps the screenshot as it is; it stays marked in the
+  // list and can be reopened by tapping it, but isn't asked about again automatically
+  const handlePickerClose = () => {
+    setIsPickerOpen(false);
+    setPodcastInfo(prev => ({
+      ...prev,
+      data: prev.data.map((item, index) => (
+        index === selectedScreenshotIndex && needsEpisodeChoice(item) ? { ...item, choiceDismissed: true } : item
+      ))
+    }));
+  };
+
+  // "None of these": search for the podcast and episode by hand instead
+  const handleSearchManually = () => {
+    handlePickerClose();
     setIsEditModalOpen(true);
   };
 
@@ -340,6 +384,11 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
       if (updatedData.episode) {
         updated.validation.validatedEpisode = updatedData.episode;
         updated.episodeTitle = updatedData.episode.title;
+      }
+      if (updatedData.podcast && updatedData.episode) {
+        // The user chose both, so it no longer needs confirming and can be transcribed
+        updated.validation.validated = true;
+        updated.validation.needsConfirmation = false;
       }
       if (updatedData.timestamp) {
         updated.timestamp = updatedData.timestamp;
@@ -409,6 +458,18 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
         } : null}
         onUpdate={handleModalUpdate}
         onDelete={handleModalDelete}
+      />
+
+      {/* "Which episode is this?" picker */}
+      <EpisodePickerModal
+        isOpen={isPickerOpen}
+        onClose={handlePickerClose}
+        screenshotData={selectedScreenshotIndex !== null && podcastInfo?.data?.[selectedScreenshotIndex] ? {
+          ...podcastInfo.data[selectedScreenshotIndex],
+          preview: previews[selectedScreenshotIndex]
+        } : null}
+        onConfirm={handleModalUpdate}
+        onSearchManually={handleSearchManually}
       />
     </div>
   );

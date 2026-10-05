@@ -1,6 +1,7 @@
 // Replays recorded real Apple Podcasts responses (test/fixtures/screenshots/*.apple.json,
 // made with `npm run capture-apple`) through identification, and checks the final podcast and
-// episode against expected.json. Screenshots without a recording are skipped.
+// episode against expected.json (or its `replay` outcome, for episodes that have since left
+// the catalog). Screenshots without a recording are skipped.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -41,8 +42,26 @@ for (const [image, want] of Object.entries(expected)) {
     const { candidates, playback } = visionService.analyzeAnnotations(fixture.textAnnotations, fixture.imageDimensions);
     const result = await visionService.validateCandidates(candidates, playback);
 
+    // Episodes that are no longer in the catalog must not be replaced by a look-alike
+    if (want.replay?.result === 'not_found') {
+      assert.strictEqual(result.validation.validated, false, `got "${result.podcastTitle}" / "${result.episodeTitle}"`);
+      if (want.replay.suggests) { // ...but the picker offers the likely episode
+        const offered = result.validation.suggestions.map(option => option.episode.title);
+        assert.ok(offered.some(title => normalize(title).includes(normalize(want.replay.suggests))),
+          `suggestions: ${offered.join(' | ')}`);
+        assert.strictEqual(result.validation.needsConfirmation, true);
+      }
+      return;
+    }
     assert.ok(normalize(result.podcastTitle).includes(normalize(want.podcast)),
       `podcast: got "${result.podcastTitle}", want "${want.podcast}"`);
+    if (want.artist) { // several shows share this name
+      assert.strictEqual(result.validation.validatedPodcast.artist, want.artist);
+    }
+    if (want.replay?.result === 'podcast_only') {
+      assert.strictEqual(result.episodeTitle, 'Unknown Episode');
+      return;
+    }
     assert.ok(normalize(result.episodeTitle).includes(normalize(want.ocr.episodeText)),
       `episode: got "${result.episodeTitle}", want one containing "${want.ocr.episodeText}"`);
   });

@@ -49,7 +49,19 @@ const podcasts = [
   },
   { id: 6, name: 'Marketplace Morning Report', feedUrl: 'https://feeds.example/mmr.xml', episodes: [['Stocks fall', minutes(8, 0)]] },
   { id: 7, name: 'Science Weekly', feedUrl: 'https://feeds.example/sw.xml', episodes: [['What moves the moon', minutes(20, 0)]] },
-  { id: 8, name: 'The Psychic Hour', feedUrl: 'https://feeds.example/ph.xml', episodes: [['The Psychic Question', minutes(60, 0)]] }
+  { id: 8, name: 'The Psychic Hour', feedUrl: 'https://feeds.example/ph.xml', episodes: [['The Psychic Question', minutes(60, 0)]] },
+  // A common name, as in the real catalog: a near-match and several shows called exactly this.
+  // The search lists them before the one on the screenshot.
+  { id: 9, name: 'Not Another Podcast', episodes: [['Pilot', minutes(20, 0)]] },
+  { id: 10, name: 'Another Podcast', artist: 'Jason Martin', episodes: [['Hello world', minutes(12, 0)]] },
+  { id: 11, name: 'Another Podcast', artist: 'Nice Try GmbH', episodes: [['Folge 1', minutes(31, 0)]] },
+  { id: 12, name: 'Another Podcast', artist: 'Saverio Tosi', episodes: [['Episodio 1', minutes(9, 0)]] },
+  {
+    id: 13, name: 'Another Podcast', artist: 'Benedict Evans, Toni Cowan-Brown',
+    episodes: [['Looking for AI strategies', minutes(27, 47)], ['AI and everything else', minutes(33, 0)]]
+  },
+  // Shown in players with a subtitle the catalog name lacks ("Good One: A Podcast About Jokes")
+  { id: 14, name: 'Good One', artist: 'Vulture', episodes: [['Marc Maron on WTF’s Final Episode and Comedy Politics', minutes(111, 34)]] }
 ];
 
 const words = text => text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(w => w.length > 2);
@@ -57,7 +69,7 @@ const overlap = (terms, text) => words(terms).filter(w => words(text).includes(w
 
 const podcastRow = p => ({
   wrapperType: 'track', kind: 'podcast', collectionId: p.id, trackId: p.id,
-  collectionName: p.name, trackName: p.name, artistName: `${p.name} Studio`,
+  collectionName: p.name, trackName: p.name, artistName: p.artist || `${p.name} Studio`,
   feedUrl: p.feedUrl, artworkUrl100: `https://art.example/${p.id}.jpg`
 });
 
@@ -94,8 +106,10 @@ function respond(url) {
       return { results: rows.filter(r => overlap(terms, r.trackName) > 0)
         .sort((a, b) => overlap(terms, b.trackName) - overlap(terms, a.trackName)).slice(0, limit) };
     }
-    return { results: podcasts.filter(p => overlap(terms, p.name) > 0)
-      .sort((a, b) => overlap(terms, b.name) - overlap(terms, a.name)).slice(0, limit).map(podcastRow) };
+    // Like Apple, podcast search also matches the artist (host or publisher)
+    const hits = p => overlap(terms, `${p.name} ${p.artist || ''}`);
+    return { results: podcasts.filter(p => hits(p) > 0)
+      .sort((a, b) => hits(b) - hits(a)).slice(0, limit).map(podcastRow) };
   }
   return null;
 }

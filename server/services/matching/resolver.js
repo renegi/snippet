@@ -6,20 +6,30 @@
 //   - name:     how well a screen line matches the podcast's name
 //   - title:    how well another screen line matches the episode title (allowing truncation)
 //   - duration: elapsed + remaining time on the player vs. the episode's length
+// Podcasts are checked in order of how well their name fits. Many shows share a name, so a
+// host/publisher line on screen and being Apple's first (most popular) result break ties.
 // Sources, cheapest first: Apple's 200 most recent episodes, then the podcast's RSS feed (back
 // catalog), then Apple's episode search (finds the podcast from the episode title).
 const logger = require('../../utils/logger');
 const { AppleCatalog } = require('./appleCatalog');
-const { nameScore, titleScore, searchTerms, normalize } = require('./text');
+const { nameScore, titleScore, containedIn, searchTerms, normalize } = require('./text');
 
 const config = {
   maxPodcastSearches: 4,  // lines tried as podcast names
   maxPodcastsChecked: 3,  // podcasts whose episode lists are fetched from Apple
-  minNameScore: 0.6,      // a podcast this similar to a screen line is worth checking
-  strongNameScore: 0.85,  // enough to trust the podcast on its own (RSS fallback, podcast-only result)
-  minTitleScore: 0.6,     // accept an episode on its title alone
+  minNameScore: 0.6,      // a podcast this similar to a screen line is a hypothesis
+  maxRankGap: 0.2,        // ...and worth an episode lookup if it ranks this close to the best one
+  strongNameScore: 0.85,  // enough to try the podcast's RSS feed
+  exactNameScore: 0.95,   // enough to check the podcast before the other lines are searched, or to return it alone
+  clearLead: 0.05,        // ...as long as no other podcast fits this nearly as well
+  artistBonus: 0.1,       // ranking bonus when another screen line names the podcast's host or publisher
+  firstResultBonus: 0.15, // ranking bonus for Apple's first search result, the most popular fit
+  minArtistScore: 0.8,
+  minTitleScore: 0.6,     // accept an episode when the duration roughly agrees too
+  minTitleOnlyScore: 0.7, // accept an episode on its title alone, when the player shows no duration
   strongTitleScore: 0.8,  // stop searching once found (unless the duration disagrees)
-  minDurationTitleScore: 0.4, // accept a weaker title when the duration also matches
+  sureTitleScore: 0.85,   // accept even when the duration disagrees (e.g. the player shows time left at 1.5x speed)
+  minDurationTitleScore: 0.55, // accept a weaker title when the duration matches closely
   minInformativeLength: 6,    // shorter episode text matches too many titles to be evidence
   nearbyDistance: 120     // px (at reference width): episode line next to the podcast line
 };
@@ -44,20 +54,27 @@ function combine({ name, title, duration }) {
 
 function isAcceptable(match) {
   if (!match) return false;
-  if (match.title >= config.minTitleScore && match.duration !== 0) return true;
+  // A wrong length still lowers the total, so a same-titled episode of the right length wins
+  if (match.title >= config.sureTitleScore) return true;
+  if (match.duration == null) return match.title >= config.minTitleOnlyScore;
+  if (match.title >= config.minTitleScore && match.duration >= 0.5) return true;
   return match.title >= config.minDurationTitleScore && match.duration >= 0.8;
 }
 
+// Good enough to stop looking: a strong title with an agreeing length, or the exact title of
+// the exact podcast
 const isStrong = match =>
-  isAcceptable(match) && match.title >= config.strongTitleScore && (match.duration == null || match.duration >= 0.5);
+  isAcceptable(match) && match.title >= config.strongTitleScore &&
+  (match.duration == null || match.duration >= 0.5 || (match.title >= 0.95 && match.name >= config.exactNameScore));
 
 // Scores a podcast's episodes against the screen lines that could be the episode title
 function scoreEpisodes({ podcast, podcastLine, name, episodes, lines, screenDuration }) {
   const episodeLines = lines.filter(line =>
     line !== podcastLine &&
     normalize(line.text).replace(/ /g, '').length >= config.minInformativeLength &&
-    // A line that is the podcast's name (e.g. artwork text) isn't the episode title
-    nameScore(line.text, podcast.collectionName) < 0.8
+    // A line that is the podcast's name, or part of it (e.g. artwork text), isn't the episode title
+    nameScore(line.text, podcast.collectionName) < 0.8 &&
+    containedIn(line.text, podcast.collectionName) < 0.9
   );
   if (episodeLines.length === 0) return [];
 
@@ -82,48 +99,93 @@ function scoreEpisodes({ podcast, podcastLine, name, episodes, lines, screenDura
 }
 
 const byTotal = (a, b) => b.total - a.total;
+const byRank = (a, b) => b.rank - a.rank;
+
+// The screen line that best fits the podcast's name, and whether a different line names its
+// host or publisher (Apple's artistName), which tells apart shows that share a name.
+function hypothesize(podcast, lines) {
+  let best = { name: 0, line: null };
+  for (const line of lines) {
+    const name = nameScore(line.text, podcast.collectionName);
+    if (name > best.name) best = { name, line };
+  }
+  const artist = !!podcast.artistName && lines.some(line =>
+    line !== best.line &&
+    containedIn(line.text, podcast.collectionName) < 0.5 &&
+    nameScore(line.text, podcast.artistName) >= config.minArtistScore);
+  return { podcast, ...best, artist };
+}
 
 async function resolve(candidates, { durationSeconds } = {}, catalog = new AppleCatalog()) {
   const lines = candidates.filter(line => line.text);
   const matches = [];
-  const hypotheses = new Map(); // collectionId → { podcast, line, name }
+  const hypotheses = new Map(); // collectionId → { podcast, line, name, artist }
+  const firstResults = new Set(); // collectionIds that came first in a podcast search
+  const checked = new Set();    // collectionIds whose recent episodes have been scored
 
+  const ranked = () => [...hypotheses.values()]
+    .map(h => ({
+      ...h,
+      rank: h.name + (h.artist ? config.artistBonus : 0) +
+        (firstResults.has(h.podcast.collectionId) ? config.firstResultBonus : 0)
+    }))
+    .sort(byRank);
+  // The best-fitting podcast, if no other fits nearly as well (several shows can share a name)
+  const clearTop = () => {
+    const [top, second] = ranked();
+    return top && (!second || top.rank - second.rank >= config.clearLead) ? top : null;
+  };
   const finish = (method, extra = {}) => ({
     method,
     matches: matches.sort(byTotal),
-    hypotheses: [...hypotheses.values()].sort((a, b) => b.name - a.name),
+    hypotheses: ranked(),
     requests: catalog.requestCount,
     rateLimited: catalog.rateLimited,
     ...extra
   });
   const best = () => matches.filter(isAcceptable).sort(byTotal)[0];
+  const checkRecentEpisodes = async hypothesis => {
+    checked.add(hypothesis.podcast.collectionId);
+    const episodes = await catalog.recentEpisodes(hypothesis.podcast.collectionId);
+    matches.push(...scoreEpisodes({
+      ...hypothesis, podcastLine: hypothesis.line, episodes, lines, screenDuration: durationSeconds
+    }));
+  };
 
-  // 1. Each line as a podcast name, then that podcast's recent episodes against the other lines
-  let podcastsChecked = 0;
+  // 1. Search each line as a podcast name. Every result is scored against all lines, since a
+  //    search for the host's name or the episode title can return the podcast too.
   for (const line of lines.slice(0, config.maxPodcastSearches)) {
     const results = await catalog.searchPodcasts(searchTerms(line.text));
-    const found = results
-      .map(podcast => ({ podcast, line, name: nameScore(line.text, podcast.collectionName) }))
-      .filter(h => h.name >= config.minNameScore && !hypotheses.has(h.podcast.collectionId))
-      .sort((a, b) => b.name - a.name);
-
-    for (const hypothesis of found) {
-      hypotheses.set(hypothesis.podcast.collectionId, hypothesis);
-      if (podcastsChecked >= config.maxPodcastsChecked) continue;
-      podcastsChecked++;
-
-      const episodes = await catalog.recentEpisodes(hypothesis.podcast.collectionId);
-      matches.push(...scoreEpisodes({
-        ...hypothesis, podcastLine: line, episodes, lines, screenDuration: durationSeconds
-      }));
+    if (results[0]) firstResults.add(results[0].collectionId);
+    for (const podcast of results) {
+      const hypothesis = hypothesize(podcast, lines);
+      if (hypothesis.name >= config.minNameScore && !hypotheses.has(podcast.collectionId)) {
+        hypotheses.set(podcast.collectionId, hypothesis);
+      }
+    }
+    // An exact, unrivalled name is checked right away, which usually ends the search here
+    const top = clearTop();
+    if (top && top.name >= config.exactNameScore && !checked.has(top.podcast.collectionId) &&
+        checked.size < config.maxPodcastsChecked) {
+      await checkRecentEpisodes(top);
       if (isStrong(best())) return finish('recent_episodes', { match: best() });
     }
     if (catalog.rateLimited) break;
   }
+
+  //    Then the recent episodes of the best-fitting podcasts, against the other lines
+  const rankedPodcasts = ranked();
+  for (const hypothesis of rankedPodcasts) {
+    if (checked.size >= config.maxPodcastsChecked || catalog.rateLimited) break;
+    if (rankedPodcasts[0].rank - hypothesis.rank > config.maxRankGap) break;
+    if (checked.has(hypothesis.podcast.collectionId)) continue;
+    await checkRecentEpisodes(hypothesis);
+    if (isStrong(best())) return finish('recent_episodes', { match: best() });
+  }
   if (best()) return finish('recent_episodes', { match: best() });
 
   // 2. The most likely podcast's full back catalog, from its RSS feed
-  const topPodcast = [...hypotheses.values()].sort((a, b) => b.name - a.name)[0];
+  const topPodcast = ranked()[0];
   if (topPodcast && topPodcast.name >= config.strongNameScore && topPodcast.podcast.feedUrl) {
     const episodes = await catalog.feedEpisodes(topPodcast.podcast.feedUrl);
     matches.push(...scoreEpisodes({
@@ -140,20 +202,24 @@ async function resolve(candidates, { durationSeconds } = {}, catalog = new Apple
     for (const line of titleLines) {
       const results = await catalog.searchEpisodes(searchTerms(line.text));
       for (const { podcast, episode } of results) {
-        const name = Math.max(0, ...lines.filter(l => l !== line).map(l => nameScore(l.text, podcast.collectionName)));
-        if (name < config.minNameScore) continue;
-        const podcastLine = lines.find(l => l !== line && nameScore(l.text, podcast.collectionName) === name);
+        const hypothesis = hypothesize(podcast, lines.filter(l => l !== line));
+        if (hypothesis.name < config.minNameScore) continue;
         matches.push(...scoreEpisodes({
-          podcast, podcastLine, name, episodes: [episode], lines, screenDuration: durationSeconds
+          ...hypothesis, podcastLine: hypothesis.line, episodes: [episode], lines, screenDuration: durationSeconds
         }));
       }
       if (best()) return finish('episode_search', { match: best() });
     }
   }
 
-  // 4. Only the podcast
-  if (topPodcast && topPodcast.name >= config.strongNameScore) {
-    return finish('podcast_only', { podcast: topPodcast });
+  // 4. Only the podcast. A wrong podcast is worse than none and many shows share common
+  //    names, so the name must be exact, and the show must be the only one with that name,
+  //    Apple's first result for it, or confirmed by its host on screen.
+  if (topPodcast && topPodcast.name >= config.exactNameScore) {
+    const sameName = ranked().filter(h => h.name >= topPodcast.name - config.clearLead).length;
+    if (sameName === 1 || topPodcast.artist || firstResults.has(topPodcast.podcast.collectionId)) {
+      return finish('podcast_only', { podcast: topPodcast });
+    }
   }
   return finish('not_found');
 }

@@ -63,10 +63,11 @@ class AppleCatalog {
     }
   }
 
-  // Podcasts whose names match the search terms
+  // Podcasts whose names match the search terms. Apple ranks by popularity as much as by name,
+  // so the limit is generous: an exact name can sit far below better-known near-matches.
   async searchPodcasts(terms) {
     if (!terms) return [];
-    const data = await this.getJson(`${BASE_URL}/search?term=${encodeURIComponent(terms)}&media=podcast&entity=podcast&limit=10`);
+    const data = await this.getJson(`${BASE_URL}/search?term=${encodeURIComponent(terms)}&media=podcast&entity=podcast&limit=50`);
     return (data?.results || []).filter(row => row.collectionId && row.collectionName);
   }
 
@@ -90,6 +91,7 @@ class AppleCatalog {
         podcast: {
           collectionId: row.collectionId,
           collectionName: row.collectionName,
+          artistName: row.artistName,
           feedUrl: row.feedUrl,
           artworkUrl100: row.artworkUrl160 || row.artworkUrl60
         },
