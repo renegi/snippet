@@ -1,6 +1,5 @@
-// Check if we're in development or production
-const isDevelopment = process.env.NODE_ENV === 'development';
-export const API_BASE_URL = process.env.REACT_APP_API_URL || (isDevelopment ? 'http://localhost:3001/api' : '/api');
+// Same-origin in production; in development Vite proxies /api to the local server (vite.config.js)
+export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 // Vercel rejects request bodies over 4.5MB; stay safely below it
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
