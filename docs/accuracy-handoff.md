@@ -6,7 +6,7 @@ Notes for the next session, which focuses on podcast/episode identification accu
 
 - **Live app:** https://snippetapp.vercel.app (Vercel, Hobby plan). Every PR gets a Vercel preview deploy; the owner tests previews on their phone before merging.
 - **Observed accuracy:** in two live tests, the owner uploaded two screenshots each time and **one of the two was identified correctly** in both tests. We don't yet know which screenshots failed or how (wrong podcast, wrong episode, or nothing found). **First step: get those screenshots from the owner** and add them as fixtures.
-- **Timestamps:** read correctly on all 5 fixtures since PR #1 (see "Already fixed").
+- **Timestamps:** read correctly on all 7 fixtures since PR #1 (see "Already fixed").
 - **Speed:** the rewrite cut Apple requests to 2–4 per screenshot in the offline tests (see step 7 below).
 
 ## How identification works
@@ -59,7 +59,7 @@ Set `DEBUG_LOGS=true` in Vercel's environment variables (Production), redeploy, 
 
 ## Open questions
 
-- **The two failing live screenshots still need adding as fixtures** (`another-podcast.png`, `good-one.jpeg`): they weren't on disk in the October 2026 session, so the fixes were verified live against Apple with the screen text typed in by hand, and are covered by fake-catalog tests. The real OCR lines for the Spotify screenshot are unknown (the live run made 2 episode searches that found nothing, though Apple's episode search returns the episode first for the clean title). Add the images, run `npm run capture-fixtures` and `npm run capture-apple`, and add them to `expected.json`.
+- **OCR reads "AI" as "Al"** (lowercase L) on the Spotify fixture, which is why Apple's episode search found nothing for it live. The title still scores 0.9 against the episode list, but the episode-search fallback is blind to it. Spotify's "E" badge also lands in the podcast line ("E Another Podcast").
 - **Episode search with cut-off words** finds little ("ading the labor market tea"). Dropping partial first/last words didn't help for the aged-out fixtures; worth retrying on a recent episode.
 
 - **Was rate limiting behind the "1 of 2 correct" tests?** The old matcher made up to ~22 Apple requests per screenshot, with two screenshots processed at once, against Apple's ~20/minute. Check the `rateLimited` field in the logs when testing.

@@ -49,6 +49,9 @@ for (const [image, want] of Object.entries(expected)) {
     }
     assert.ok(normalize(result.podcastTitle).includes(normalize(want.podcast)),
       `podcast: got "${result.podcastTitle}", want "${want.podcast}"`);
+    if (want.artist) { // several shows share this name
+      assert.strictEqual(result.validation.validatedPodcast.artist, want.artist);
+    }
     if (want.replay?.result === 'podcast_only') {
       assert.strictEqual(result.episodeTitle, 'Unknown Episode');
       return;
