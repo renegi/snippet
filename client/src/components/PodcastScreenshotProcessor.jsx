@@ -311,7 +311,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
         // The podcast alone, or nothing, was found: the user has to choose the episode
         const episodeMissing = !hasError && hasAnyData && !dataItem.validation.validatedEpisode;
 
-        const finalEpisodeTitle = episodeMissing ? "Episode couldn't be identified" : (
+        const finalEpisodeTitle = episodeMissing ? 'Unidentified episode' : (
                                  dataItem.episodeTitle ||
                                  dataItem.validation?.validatedEpisode?.title || 
                                  (hasError ? 'Extraction failed' : `Episode ${index + 1}`));
