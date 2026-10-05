@@ -27,17 +27,21 @@ for (const [image, want] of Object.entries(expected)) {
     assert.strictEqual(timestamp, want.timestamp);
   });
 
-  test(`${image}: pairs the podcast and episode titles`, () => {
+  test(`${image}: finds the podcast and episode titles`, () => {
     const { candidates } = visionService.analyzeAnnotations(fixture.textAnnotations, fixture.imageDimensions);
-    const pairs = visionService.findSpatialPairs(candidates);
     const { podcastText, episodeText } = want.ocr;
+    const texts = candidates.map(c => c.text);
 
-    const found = pairs.some(({ top, bottom }) =>
-      (contains(top.text, episodeText) && contains(bottom.text, podcastText)) ||
-      (contains(top.text, podcastText) && contains(bottom.text, episodeText))
-    );
-    assert.ok(found, `no pair matching "${episodeText}" + "${podcastText}"; pairs were: ${
-      JSON.stringify(pairs.map(p => [p.top.text, p.bottom.text]))}`);
+    for (const part of [podcastText, episodeText]) {
+      assert.ok(texts.some(text => contains(text, part)), `no candidate contains "${part}"; candidates were: ${JSON.stringify(texts)}`);
+    }
+  });
+
+  test(`${image}: reads the episode length from the player`, () => {
+    const { playback } = visionService.analyzeAnnotations(fixture.textAnnotations, fixture.imageDimensions);
+    assert.strictEqual(playback.elapsed, want.timestamp);
+    assert.ok(playback.remaining, 'remaining time found');
+    assert.ok(playback.durationSeconds > 0);
   });
 }
 

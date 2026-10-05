@@ -2,7 +2,24 @@
 // These methods are mixed into VisionService (../visionService.js), so `this` is the service.
 const logger = require('../../utils/logger');
 
+// "1:02:03" or "15:14" → seconds
+const toSeconds = time => time.split(':').map(Number).reduce((total, part) => total * 60 + part, 0);
+
 module.exports = {
+  // Elapsed and remaining time on the player ("15:14 … -15:36"), and the episode length they add up to.
+  // Fields are null when the player doesn't show them.
+  extractPlayback(textAnnotations, elapsed) {
+    const fullText = textAnnotations?.[0]?.description || '';
+    const remainingTimes = [...fullText.matchAll(/(?:^|\s)[-−–]\s?(\d{1,2}:\d{2}(?::\d{2})?)(?=\s|$)/g)].map(m => m[1]);
+    // Vision lists text top to bottom; the player's remaining time is the lowest one
+    const remaining = remainingTimes[remainingTimes.length - 1] || null;
+    return {
+      elapsed: elapsed || null,
+      remaining,
+      durationSeconds: elapsed && remaining ? toSeconds(elapsed) + toSeconds(remaining) : null
+    };
+  },
+
   extractTimestamp(textAnnotations, imageDimensions) {
     try {
       logger.debug(`⏰ extractTimestamp - FUNCTION CALLED with ${textAnnotations ? textAnnotations.length : 0} annotations`);

@@ -26,7 +26,10 @@ router.post('/', upload.array('screenshots', 5), async (req, res, next) => {
           podcastTitle: podcastInfo.podcastTitle,
           episodeTitle: podcastInfo.episodeTitle,
           timestamp: podcastInfo.timestamp,
-          validated: podcastInfo.validation?.validated
+          validated: podcastInfo.validation?.validated,
+          method: podcastInfo.validation?.method,
+          appleRequests: podcastInfo.validation?.appleRequests,
+          rateLimited: podcastInfo.validation?.rateLimited
         });
 
         results.push(podcastInfo);

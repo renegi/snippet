@@ -1,5 +1,5 @@
 {
-  "_note": "Expected results per screenshot. `ocr` lists text the OCR stage must pair up (one side each) before Apple Podcasts validation. Full titles marked confirmed: false still need checking.",
+  "_note": "Expected results per screenshot. `ocr` lists text the OCR stage must find among its title candidates. Full titles marked confirmed: false still need checking.",
   "big-picture-science.jpg": {
     "player": "Apple Podcasts (full screen)",
     "podcast": "Big Picture Science",
