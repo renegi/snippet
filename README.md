@@ -20,7 +20,7 @@ Snippet uses OCR (Optical Character Recognition) to detect podcast and episode t
 ## Architecture
 
 ### Frontend (React)
-- **Location**: `snippet/client/`
+- **Location**: `client/`
 - **Key Components**:
   - `PodcastScreenshotProcessor`: Main screenshot processing interface
   - `TimeRangeSelection`: Time range selection and transcript generation
@@ -28,7 +28,7 @@ Snippet uses OCR (Optical Character Recognition) to detect podcast and episode t
   - `ScreenshotEditModal`: Manual podcast/episode editing
 
 ### Backend (Node.js/Express)
-- **Location**: `snippet/server/`
+- **Location**: `server/`
 - **Key Services**:
   - `VisionService`: Google Vision API integration for OCR
   - `ApplePodcastsService`: Apple Podcasts API integration
@@ -86,6 +86,16 @@ Snippet uses OCR (Optical Character Recognition) to detect podcast and episode t
    npm start
    ```
 
+## Testing
+
+```bash
+cd server
+npm test                  # offline OCR tests using recorded Google Vision responses
+npm run capture-fixtures  # record Vision responses for new screenshots in test/fixtures/screenshots/
+```
+
+`capture-fixtures` needs Google credentials in `server/.env`; the tests don't.
+
 ## Usage
 
 1. **Upload Screenshots**: Select one or more podcast screenshots from your device
@@ -130,7 +140,7 @@ Snippet uses OCR (Optical Character Recognition) to detect podcast and episode t
 Screenshots are uploaded one per request and re-encoded in the browser only when needed, to stay under Vercel's 4.5MB request limit.
 
 ### Render
-`render.yaml` still works: it builds the client and runs `snippet/server/server.js`, which serves both the API and the React build.
+`render.yaml` still works: it builds the client and runs `server/server.js`, which serves both the API and the React build.
 
 ## Known Bugs
 
