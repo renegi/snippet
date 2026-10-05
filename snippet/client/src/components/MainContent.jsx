@@ -198,6 +198,7 @@ const MainContent = ({
         document.removeEventListener('touchend', handleTouchEnd);
       };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDragging, dragHandle]);
 
   const handleGenerateTranscript = () => {

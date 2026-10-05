@@ -1,63 +1,71 @@
 // Check if we're in development or production
 const isDevelopment = process.env.NODE_ENV === 'development';
-const API_BASE_URL = process.env.REACT_APP_API_URL || (isDevelopment ? 'http://localhost:3001/api' : '/api');
+export const API_BASE_URL = process.env.REACT_APP_API_URL || (isDevelopment ? 'http://localhost:3001/api' : '/api');
 
-export const processScreenshots = async (formData) => {
-  console.log('📱 Mobile Debug: API call starting', {
-    url: `${API_BASE_URL}/extract`,
-    isDevelopment,
-    API_BASE_URL
-  });
+// Vercel rejects request bodies over 4.5MB; stay safely below it
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+// Formats Google Vision reads directly; anything else (e.g. HEIC) gets converted
+const VISION_FRIENDLY_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+
+// Returns a file that is safe to upload. Most screenshots pass through unchanged;
+// oversized or unsupported images are re-encoded as JPEG at their original
+// dimensions (the OCR filtering relies on pixel positions, so we never resize).
+export const prepareImageForUpload = async (file) => {
+  if (VISION_FRIENDLY_TYPES.includes(file.type) && file.size <= MAX_UPLOAD_BYTES) {
+    return file;
+  }
 
   try {
-    // Add timeout to prevent infinite loading
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext('2d').drawImage(bitmap, 0, 0);
+    if (bitmap.close) bitmap.close();
 
+    for (const quality of [0.92, 0.8, 0.65]) {
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+      if (blob && blob.size <= MAX_UPLOAD_BYTES) {
+        const name = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+        return new File([blob], name, { type: 'image/jpeg' });
+      }
+    }
+  } catch (error) {
+    console.warn('Could not convert image, uploading original:', error);
+  }
+
+  return file;
+};
+
+// Sends one screenshot per request so each upload stays under the size limit
+export const processScreenshot = async (file) => {
+  const uploadFile = await prepareImageForUpload(file);
+  const formData = new FormData();
+  formData.append('screenshots', uploadFile);
+
+  // Add timeout to prevent infinite loading
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+
+  try {
     const response = await fetch(`${API_BASE_URL}/extract`, {
       method: 'POST',
       body: formData,
       signal: controller.signal
     });
 
-    clearTimeout(timeoutId);
-
-    console.log('📱 Mobile Debug: API response received', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok
-    });
-
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('📱 Mobile Debug: API error response', {
-        status: response.status,
-        statusText: response.statusText,
-        errorText
-      });
-      throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      throw new Error(await getErrorMessage(response));
     }
 
-    const result = await response.json();
-    console.log('📱 Mobile Debug: API result parsed', {
-      success: result.success,
-      dataLength: result.data?.length || 0,
-      hasError: !!result.error
-    });
-
-    return result;
+    return await response.json();
   } catch (error) {
-    console.error('📱 Mobile Debug: API call failed', {
-      error: error.message,
-      name: error.name,
-      stack: error.stack
-    });
-
     if (error.name === 'AbortError') {
       throw new Error('Request timed out - server took too long to respond');
     }
-
     throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 };
 
@@ -78,8 +86,22 @@ export const getTranscript = async (podcastInfo, timeRange) => {
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    throw new Error(await getErrorMessage(response));
   }
 
   return response.json();
-}; 
+};
+
+// Pulls a readable message out of an error response (JSON or plain text)
+const getErrorMessage = async (response) => {
+  const text = await response.text();
+  try {
+    const body = JSON.parse(text);
+    const message = typeof body.error === 'string' ? body.error : body.error?.message || body.message;
+    if (message) return message;
+  } catch (e) {
+    // Not JSON
+  }
+  if (response.status === 413) return 'Screenshot is too large to upload';
+  return `Server error (${response.status})`;
+};

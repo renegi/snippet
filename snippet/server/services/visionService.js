@@ -28,9 +28,9 @@ class VisionService {
     };
   }
 
-  async getImageDimensions(imagePath) {
+  async getImageDimensions(image) {
     try {
-      const metadata = await sharp(imagePath).metadata();
+      const metadata = await sharp(image).metadata();
       return {
         width: metadata.width,
         height: metadata.height
@@ -41,24 +41,23 @@ class VisionService {
     }
   }
 
-  async extractText(imagePath) {
+  // `image` is a Buffer (uploads are kept in memory) or a file path
+  async extractText(image) {
     try {
-      logger.info('Mobile Debug: Starting Vision API text detection', {
-        imagePath,
-        fileExists: require('fs').existsSync(imagePath)
-      });
+      logger.info('Mobile Debug: Starting Vision API text detection');
       
       // Extract image dimensions for image-relative filtering
-      const imageDimensions = await this.getImageDimensions(imagePath);
+      const imageDimensions = await this.getImageDimensions(image);
       logger.info('Mobile Debug: Image dimensions:', imageDimensions);
       
       // Add timeout for large mobile images
-      const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Vision API timeout - image too large or processing taking too long')), 30000)
-      );
+      let timeoutId;
+      const timeout = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Vision API timeout - image too large or processing taking too long')), 30000);
+      });
       
-      const visionCall = this.client.textDetection(imagePath);
-      const [result] = await Promise.race([visionCall, timeout]);
+      const visionCall = this.client.textDetection(image);
+      const [result] = await Promise.race([visionCall, timeout]).finally(() => clearTimeout(timeoutId));
       
       logger.info('Mobile Debug: Vision API call completed successfully');
       const detections = result.textAnnotations;
@@ -94,8 +93,7 @@ class VisionService {
       logger.error('Mobile Debug: Error in Vision API:', {
         error: error.message,
         code: error.code,
-        stack: error.stack,
-        imagePath
+        stack: error.stack
       });
       
       // Provide more specific error messages

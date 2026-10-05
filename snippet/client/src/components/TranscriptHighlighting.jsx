@@ -28,7 +28,7 @@ const TranscriptHighlighting = ({
   const [mouseDownOccurred, setMouseDownOccurred] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [initialSelectionState, setInitialSelectionState] = useState(new Set()); // Store initial selection state
-  const [isDeselecting, setIsDeselecting] = useState(false); // New state for deselection mode
+  const [, setIsDeselecting] = useState(false); // New state for deselection mode
   
   // Touch hold delay states
   const [touchStartPosition, setTouchStartPosition] = useState(null);
@@ -36,7 +36,6 @@ const TranscriptHighlighting = ({
 
   // Get current episode's selections
   const selectedWords = episodeSelections[currentEpisodeIndex] || new Set();
-  const lastSelectedWord = episodeSelections[`${currentEpisodeIndex}_lastSelected`] || null;
 
   // Helper function to update episode-specific selections
   const updateEpisodeSelection = (newSelectedWords, newLastSelectedWord = null) => {
@@ -99,30 +98,6 @@ const TranscriptHighlighting = ({
   const getWordIndex = (target) => {
     const wordIndex = parseInt(target.getAttribute('data-word-index'));
     return isNaN(wordIndex) ? null : wordIndex;
-  };
-
-  const selectRange = (startIndex, endIndex) => {
-    const start = Math.min(startIndex, endIndex);
-    const end = Math.max(startIndex, endIndex);
-    const newSelected = new Set(selectedWords);
-    
-    for (let i = start; i <= end; i++) {
-      newSelected.add(i);
-    }
-    
-    updateEpisodeSelection(newSelected, endIndex);
-  };
-
-  const deselectRange = (startIndex, endIndex) => {
-    const start = Math.min(startIndex, endIndex);
-    const end = Math.max(startIndex, endIndex);
-    const newSelected = new Set(selectedWords);
-    
-    for (let i = start; i <= end; i++) {
-      newSelected.delete(i);
-    }
-    
-    updateEpisodeSelection(newSelected, endIndex);
   };
 
   const handleWordClick = (e) => {
@@ -189,7 +164,6 @@ const TranscriptHighlighting = ({
           };
           
           const continuousBlock = findContinuousBlock(wordIndex);
-          const blockStart = Math.min(...continuousBlock);
           
           // Trim selection within this block only - keep words from block start to clicked word
           const newSelected = new Set(selectedWords);
@@ -267,7 +241,6 @@ const TranscriptHighlighting = ({
     // If we were pending selection, decide whether to convert to selection or treat as tap
     if (isPendingSelection && touchStartPosition) {
       const touchDuration = Date.now() - touchStartPosition.timestamp;
-      const hasMovedSignificantly = false; // We'll check this in the global touch move handler
       
       // If it was a quick tap (less than 200ms) and no significant movement, treat as click
       if (touchDuration < 200 && !isSelecting) {
@@ -699,6 +672,7 @@ const TranscriptHighlighting = ({
         document.removeEventListener('touchmove', handleGlobalTouchMove);
       };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSelecting, selectionStart, selectedWords]);
 
   // Touch event handlers

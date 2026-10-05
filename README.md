@@ -37,7 +37,7 @@ Snippet uses OCR (Optical Character Recognition) to detect podcast and episode t
 ## Setup
 
 ### Prerequisites
-- Node.js (v16 or higher)
+- Node.js (v18 or higher)
 - npm or yarn
 - Google Cloud Vision API credentials
 - Apple Podcasts API access
@@ -118,11 +118,20 @@ Snippet uses OCR (Optical Character Recognition) to detect podcast and episode t
 
 ## Deployment
 
-### Render
-The application is configured for deployment on Render with the provided `render.yaml` file.
+### Vercel (recommended)
+`vercel.json` deploys the React build as static files and the Express API as one serverless function (`api/index.js`).
 
-### Vercel
-A `vercel.json` configuration is included for Vercel deployment.
+1. Import the repository in Vercel (leave the root directory as the repo root; `vercel.json` sets the install, build and output settings).
+2. Add environment variables:
+   - `GOOGLE_APPLICATION_CREDENTIALS_BASE64` (base64-encoded service account JSON)
+   - `ASSEMBLYAI_API_KEY`
+   - `GOOGLE_CLOUD_PROJECT_ID` (optional; read from the credentials if omitted)
+3. Deploy.
+
+Screenshots are uploaded one per request and re-encoded in the browser only when needed, to stay under Vercel's 4.5MB request limit.
+
+### Render
+`render.yaml` still works: it builds the client and runs `snippet/server/server.js`, which serves both the API and the React build.
 
 ## Known Bugs
 
