@@ -4,7 +4,6 @@ const logger = require('../utils/logger');
 const { getGoogleClientConfig } = require('../utils/googleCredentials');
 const candidateMethods = require('./vision/candidates');
 const timestampMethods = require('./vision/timestamp');
-const pairingMethods = require('./vision/pairing');
 const validationMethods = require('./vision/validation');
 
 // Width (px) of the screenshots the pixel thresholds below were tuned on (iPhone 12-14)
@@ -59,14 +58,16 @@ class VisionService {
     return this._client;
   }
 
-  // Finds title candidates and the playback timestamp in Vision text annotations.
+  // Finds title candidates, the playback timestamp and the episode length in Vision text annotations.
   // Geometry is first normalized to REFERENCE_WIDTH, because the filtering rules
   // use absolute pixel sizes tuned on screenshots of that width.
   analyzeAnnotations(textAnnotations, imageDimensions) {
     const normalized = normalizeToReferenceWidth(textAnnotations, imageDimensions);
+    const timestamp = this.extractTimestamp(normalized.textAnnotations, normalized.imageDimensions);
     return {
       candidates: this.extractTextCandidates(normalized.textAnnotations, normalized.imageDimensions),
-      timestamp: this.extractTimestamp(normalized.textAnnotations, normalized.imageDimensions)
+      timestamp,
+      playback: this.extractPlayback(normalized.textAnnotations, timestamp)
     };
   }
 
@@ -112,13 +113,13 @@ class VisionService {
       logger.debug('OCR Full Text:', fullText);
       
       // Extract structured information with image dimensions
-      const { candidates, timestamp } = this.analyzeAnnotations(detections, imageDimensions);
+      const { candidates, timestamp, playback } = this.analyzeAnnotations(detections, imageDimensions);
       logger.debug(`⏰ extractText - Timestamp extracted: ${timestamp}`);
       
       logger.debug(`Found ${candidates.length} text candidates`);
       
-      // Validate candidates against podcast API
-      const validationResult = await this.validateCandidates(candidates);
+      // Identify the podcast and episode in Apple Podcasts
+      const validationResult = await this.validateCandidates(candidates, playback);
       
       return {
         podcastTitle: validationResult.podcastTitle,
@@ -153,7 +154,7 @@ class VisionService {
 }
 
 // The OCR pipeline's steps live in ./vision/ and are attached as methods
-Object.assign(VisionService.prototype, candidateMethods, timestampMethods, pairingMethods, validationMethods);
+Object.assign(VisionService.prototype, candidateMethods, timestampMethods, validationMethods);
 
 module.exports = new VisionService();
 module.exports.normalizeToReferenceWidth = normalizeToReferenceWidth; 
