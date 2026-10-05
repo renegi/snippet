@@ -129,7 +129,7 @@ npm run capture-fixtures  # record Vision responses for new screenshots in test/
 
 ## Deployment
 
-### Vercel (recommended)
+### Vercel
 `vercel.json` deploys the React build as static files and the Express API as one serverless function (`api/index.js`).
 
 1. Import the repository in Vercel (leave the root directory as the repo root; `vercel.json` sets the install, build and output settings).
@@ -139,9 +139,6 @@ npm run capture-fixtures  # record Vision responses for new screenshots in test/
 3. Deploy.
 
 Screenshots are uploaded one per request and re-encoded in the browser only when needed, to stay under Vercel's 4.5MB request limit.
-
-### Render
-`render.yaml` still works: it builds the client and runs `server/server.js`, which serves both the API and the React build.
 
 ## Known Bugs
 

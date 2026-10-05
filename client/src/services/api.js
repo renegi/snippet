@@ -79,7 +79,7 @@ export const getTranscript = async (podcastInfo, timeRange) => {
         validatedPodcast: podcastInfo.validation?.validatedPodcast,
         validatedEpisode: podcastInfo.validation?.validatedEpisode
       },
-      timestamp: podcastInfo.timestamp || podcastInfo.secondPass?.timestamp || podcastInfo.firstPass?.timestamp,
+      timestamp: podcastInfo.timestamp,
       timeRange: timeRange
     }),
   });

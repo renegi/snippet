@@ -31,9 +31,9 @@ const ScreenshotEditModal = ({
       
       const podcast = screenshotData.validation?.validatedPodcast || null;
       const episode = screenshotData.validation?.validatedEpisode || null;
-      const timestamp = screenshotData.timestamp || screenshotData.secondPass?.timestamp || screenshotData.firstPass?.timestamp || '';
-      const podcastTitle = screenshotData.podcastTitle || screenshotData.secondPass?.podcastTitle || screenshotData.firstPass?.podcastTitle || '';
-      const episodeTitle = screenshotData.episodeTitle || screenshotData.secondPass?.episodeTitle || screenshotData.firstPass?.episodeTitle || '';
+      const timestamp = screenshotData.timestamp || '';
+      const podcastTitle = screenshotData.podcastTitle || '';
+      const episodeTitle = screenshotData.episodeTitle || '';
       
       
       setSelectedPodcast(podcast);
@@ -182,20 +182,8 @@ const ScreenshotEditModal = ({
     onClose();
   };
 
-  // Extract timestamp candidates from the screenshot data
-  const timestampCandidates = [];
-  if (screenshotData?.firstPass?.timestamp) {
-    timestampCandidates.push(screenshotData.firstPass.timestamp);
-  }
-  if (screenshotData?.secondPass?.timestamp && 
-      screenshotData.secondPass.timestamp !== screenshotData.firstPass?.timestamp) {
-    timestampCandidates.push(screenshotData.secondPass.timestamp);
-  }
-  
-  // Add any additional timestamps found in the data
-  if (screenshotData?.timestamp && !timestampCandidates.includes(screenshotData.timestamp)) {
-    timestampCandidates.push(screenshotData.timestamp);
-  }
+  // Timestamp suggestions shown in the modal: the one read from the screenshot (or edited)
+  const timestampCandidates = screenshotData?.timestamp ? [screenshotData.timestamp] : [];
 
   if (!isOpen) return null;
 

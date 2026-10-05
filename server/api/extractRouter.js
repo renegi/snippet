@@ -39,9 +39,7 @@ router.post('/', upload.array('screenshots', 5), async (req, res, next) => {
         // Add error result instead of breaking the whole process
         results.push({
           error: true,
-          message: `Failed to process ${file.originalname}: ${fileError.message}`,
-          firstPass: { error: true },
-          secondPass: { error: true }
+          message: `Failed to process ${file.originalname}: ${fileError.message}`
         });
       }
     }
