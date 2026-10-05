@@ -181,80 +181,68 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
       after: selectedTimeRange.end
     };
 
-    // Process transcripts for ALL validated screenshots
+    // Request transcripts for all validated screenshots at once; results keep screenshot order
     const episodes = [];
     const failures = [];
-    const validatedEpisodes = podcastInfo.data.filter(info => 
-      info.validation?.validated && info.secondPass?.timestamp
-    );
-    
-    console.log(`📊 Found ${validatedEpisodes.length} validated episodes out of ${podcastInfo.data.length} total`);
-    
-    for (let index = 0; index < podcastInfo.data.length; index++) {
-      const info = podcastInfo.data[index];
-      
-      console.log(`🔄 Processing episode ${index + 1}/${podcastInfo.data.length}`);
-      
-      if (info.validation?.validated && (info.timestamp || info.secondPass?.timestamp || info.firstPass?.timestamp)) {
-        try {
-          const transcriptResult = await handleGetTranscript(info, index, convertedTimeRange);
-          
-          // Add each transcript to the episodes array with proper data mapping
-          if (transcriptResult && (transcriptResult.transcript || transcriptResult.text)) {
-            console.log(`✅ Successfully got transcript for episode ${index}:`, {
-              episodeTitle: transcriptResult.episode?.title || info.validation?.validatedEpisode?.title,
-              textLength: (transcriptResult.transcript || transcriptResult.text).length,
-              hasWords: !!transcriptResult.words
-            });
+    const eligible = podcastInfo.data
+      .map((info, index) => ({ info, index }))
+      .filter(({ info }) => info.validation?.validated && (info.timestamp || info.secondPass?.timestamp || info.firstPass?.timestamp));
 
-            const episodeData = {
-              transcript: transcriptResult.transcript || transcriptResult.text,
-              episodeTitle: transcriptResult.episode?.title || 
-                           info.episodeTitle ||
-                           info.validation?.validatedEpisode?.title || 
-                           info.secondPass?.episodeTitle || 
-                           `Episode ${index + 1}`,
-              timestamp: `${selectedTimeRange.start}s to ${selectedTimeRange.end}s`,
-              podcastArtwork: transcriptResult.episode?.artworkUrl || 
-                             info.validation?.validatedEpisode?.artworkUrl || 
-                             info.validation?.validatedPodcast?.artworkUrl ||
-                             info.validation?.validatedPodcast?.artworkUrl600 ||
-                             info.validation?.validatedPodcast?.artworkUrl100,
-              originalTimestamp: info.timestamp || info.secondPass?.timestamp || info.firstPass?.timestamp || '0:00',
-              selectedRange: selectedTimeRange,
-              // Add the missing data for copy functionality
-              podcastName: transcriptResult.podcast?.title || 
-                          info.podcastTitle ||
-                          info.validation?.validatedPodcast?.title,
-              podcastId: transcriptResult.podcast?.id || 
-                        info.validation?.validatedPodcast?.id,
-              episodeId: transcriptResult.episode?.id || 
-                        info.validation?.validatedEpisode?.id,
-              words: transcriptResult.words || [], // Word-level timestamps from AssemblyAI
-              utterances: transcriptResult.utterances || [], // Speaker-separated utterances from AssemblyAI
-              // Include validation data for fallback
-              validatedPodcast: info.validation?.validatedPodcast,
-              validatedEpisode: info.validation?.validatedEpisode
-            };
-            
-            episodes.push(episodeData);
-            console.log(`📝 Added episode ${index} to episodes array. Total episodes: ${episodes.length}`);
-          } else {
-            console.warn(`⚠️ No transcript result for episode ${index}`);
-          }
-        } catch (error) {
-          console.error(`❌ Error generating transcript for episode ${index}:`, error);
-          failures.push(error.message);
-        }
-      } else {
-        console.warn(`⚠️ Episode ${index} skipped - validation failed or missing timestamp:`, {
-          validated: info.validation?.validated,
-          hasDirectTimestamp: !!info.timestamp,
-          hasSecondPassTimestamp: !!info.secondPass?.timestamp,
-          hasFirstPassTimestamp: !!info.firstPass?.timestamp
-        });
-      }
+    setIsGettingTranscript(true);
+    let results;
+    try {
+      results = await Promise.allSettled(
+        eligible.map(({ info, index }) => handleGetTranscript(info, index, convertedTimeRange))
+      );
+    } finally {
+      setIsGettingTranscript(false);
     }
+
+    results.forEach((result, i) => {
+      const { info, index } = eligible[i];
+      if (result.status === 'rejected') {
+        console.error(`❌ Error generating transcript for episode ${index}:`, result.reason);
+        failures.push(result.reason.message);
+        return;
+      }
+
+      const transcriptResult = result.value;
+      if (transcriptResult && (transcriptResult.transcript || transcriptResult.text)) {
+        const episodeData = {
+          transcript: transcriptResult.transcript || transcriptResult.text,
+          episodeTitle: transcriptResult.episode?.title || 
+                       info.episodeTitle ||
+                       info.validation?.validatedEpisode?.title || 
+                       info.secondPass?.episodeTitle || 
+                       `Episode ${index + 1}`,
+          timestamp: `${selectedTimeRange.start}s to ${selectedTimeRange.end}s`,
+          podcastArtwork: transcriptResult.episode?.artworkUrl || 
+                         info.validation?.validatedEpisode?.artworkUrl || 
+                         info.validation?.validatedPodcast?.artworkUrl ||
+                         info.validation?.validatedPodcast?.artworkUrl600 ||
+                         info.validation?.validatedPodcast?.artworkUrl100,
+          originalTimestamp: info.timestamp || info.secondPass?.timestamp || info.firstPass?.timestamp || '0:00',
+          selectedRange: selectedTimeRange,
+          // Add the missing data for copy functionality
+          podcastName: transcriptResult.podcast?.title || 
+                      info.podcastTitle ||
+                      info.validation?.validatedPodcast?.title,
+          podcastId: transcriptResult.podcast?.id || 
+                    info.validation?.validatedPodcast?.id,
+          episodeId: transcriptResult.episode?.id || 
+                    info.validation?.validatedEpisode?.id,
+          words: transcriptResult.words || [], // Word-level timestamps from AssemblyAI
+          utterances: transcriptResult.utterances || [], // Speaker-separated utterances from AssemblyAI
+          // Include validation data for fallback
+          validatedPodcast: info.validation?.validatedPodcast,
+          validatedEpisode: info.validation?.validatedEpisode
+        };
+
+        episodes.push(episodeData);
+      } else {
+        console.warn(`⚠️ No transcript result for episode ${index}`);
+      }
+    });
     
     console.log(`🎉 Transcript generation complete. Generated ${episodes.length} episodes out of ${podcastInfo.data.length} total`);
     
@@ -298,7 +286,6 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
 
     console.log(`✅ Episode ${index} has required info, proceeding with transcript generation`);
 
-    setIsGettingTranscript(true);
     try {
       const transcriptResult = await getTranscript(info, customTimeRange || timeRange);
       
@@ -313,8 +300,6 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     } catch (error) {
       console.error(`❌ Error getting transcript for episode ${index}:`, error);
       throw error;
-    } finally {
-      setIsGettingTranscript(false);
     }
   };
 
