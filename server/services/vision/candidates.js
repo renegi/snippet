@@ -2,6 +2,12 @@
 // These methods are mixed into VisionService (../visionService.js), so `this` is the service.
 const logger = require('../../utils/logger');
 
+const MONTHS = '(january|february|march|april|may|june|july|august|september|october|november|december|' +
+  'jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec|' +
+  'enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)';
+const WEEKDAYS = '(monday|tuesday|wednesday|thursday|friday|saturday|sunday|' +
+  'lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)';
+
 module.exports = {
   extractTextCandidates(textAnnotations, imageDimensions) {
     const individualTexts = textAnnotations.slice(1);
@@ -441,18 +447,19 @@ module.exports = {
         return false;
       }
       
-    // Exclude system UI text patterns
-    const systemUITexts = [
-      'recarga optimizada',
-      'el final de la recarga está programado',
-      'para las',
-      'sueño',
-      'wi-fi',
-      'miércoles',
-      'julio'
+    // Exclude iOS lock-screen system text (Spanish and English). Whole-line patterns only,
+    // so titles that merely contain words like "para las" aren't dropped.
+    const systemUIPatterns = [
+      /^recarga optimizada/,
+      /recarga está programad/,
+      /^para las \d/,
+      /^(sueño|sleep|wi-?fi)$/,
+      /^\d+% de carga$/,
+      /^optimized (battery )?charging/,
+      /^charging (on hold|will finish)/
     ];
     
-    if (systemUITexts.some(systemText => text.includes(systemText))) {
+    if (systemUIPatterns.some(pattern => pattern.test(text))) {
       logger.debug(`Rejecting "${originalText}" - system UI text`);
       return false;
     }
@@ -532,105 +539,28 @@ module.exports = {
     return timePatterns.some(pattern => pattern.test(text));
   },
 
+  // Lock-screen dates ("Miércoles, 2 de julio", "Monday, June 30", "29 DE JUNIO", "2/7/2025").
+  // Matches only month and weekday names next to numbers, so titles like "10 Percent Happier"
+  // or "Episode 12" aren't mistaken for dates. `text` is lowercase.
   isDatePattern(text) {
-    // Universal date indicators (language-agnostic)
-    
-    // Contains numbers with date-like separators (but not version numbers like 2.0)
+    // Numeric dates; not version numbers like "2.0" in longer titles
     if (/\d+[\/\-\.]\d+([\/\-\.]\d+)?/.test(text)) {
-      // Exclude version numbers like "2.0", "1.5", etc.
       if (!/\d+\.\d+/.test(text) || text.length < 10) {
-      return true;
+        return true;
       }
     }
     
-    // Day-month patterns (any language) - but not version numbers
-    if (/\d{1,2}\s+\w+/.test(text) && text.length < 25) {
-      // Exclude patterns like "2.0" where the space might be interpreted as \s+
-      if (!/\d+\.\d+/.test(text)) {
-      return true;
-      }
-    }
-    
-    // Month-day patterns 
-    if (/\w+\s+\d{1,2}/.test(text) && text.length < 25) {
+    if (new RegExp(`\\b\\d{1,2}\\s+(de\\s+)?${MONTHS}\\b`).test(text) ||
+        new RegExp(`\\b${MONTHS}\\.?\\s+\\d{1,2}\\b`).test(text)) {
       return true;
     }
     
-    // Contains "de" pattern common in Romance languages for dates
-    if (/\d+\s+de\s+\w+/.test(text)) {
-      return true;
-    }
-    
-    // Weekday patterns (usually start with capital and are single words or short phrases)
-    if (/^[A-Z]\w+,/.test(text) && text.length < 20) {
+    // A line starting with a weekday ("lunes, 30 de junio", "monday, june 30")
+    if (new RegExp(`^${WEEKDAYS}\\b`).test(text) && text.length < 30) {
       return true;
     }
     
     return false;
-  },
-
-  hasSystemTextStructure(text, line) {
-    // Structural indicators that suggest system text regardless of language
-    
-    // 1. Very small font BUT preserve potential timestamps
-    if (line.avgArea < 300 && !this.couldBeTimestamp(text)) {
-      return true;
-    }
-    
-    // 2. Contains numbers and short words (common in system text)
-    const words = text.split(/\s+/);
-    const hasNumbers = /\d/.test(text);
-    const avgWordLength = words.reduce((sum, word) => sum + word.length, 0) / words.length;
-    
-    if (hasNumbers && avgWordLength < 4 && words.length <= 4 && !this.couldBeTimestamp(text)) {
-      return true;
-    }
-    
-    // 3. Contains colon followed by numbers (often time or status) - but check if it's a clock
-    if (/:\s*\d/.test(text) && this.isClockTime(text, line)) {
-      return true;
-    }
-    
-    // 4. Starts with numbers (often metadata) - but not timestamps
-    if (/^\d/.test(text) && text.length < 15 && !this.couldBeTimestamp(text)) {
-      return true;
-    }
-    
-    // 5. Contains special characters suggesting UI elements
-    if (/[→←↑↓▶◀⏸⏯⏭⏮🔄🔀]/.test(text)) {
-      return true;
-    }
-    
-    return false;
-  },
-
-  couldBeTimestamp(text) {
-    // Check if text could be a podcast timestamp
-    // Podcast timestamps: "15:14", "1:23:45", "0:45", etc.
-    return /^\d{1,2}:\d{2}(:\d{2})?$/.test(text.trim());
-  },
-
-  isClockTime(text, line) {
-    // Distinguish between clock times (like "11:03") and podcast timestamps
-    
-    // 1. Very large text is likely a clock display
-    if (line.avgArea > 5000) {
-      return true;
-    }
-    
-    // 2. Check position - clocks are usually in upper portion of screen
-    // This will be refined by our position filtering, but add extra check
-    if (line.avgY < 500 && line.avgArea > 2000) { // Top area + large font
-      return true;
-    }
-    
-    // 3. Single time without context (no progress bar nearby) suggests clock
-    // This is harder to detect structurally, but very large isolated times are usually clocks
-    if (line.avgArea > 3000 && /^\d{1,2}:\d{2}$/.test(text.trim())) {
-      return true;
-    }
-    
-          return false;
   },
 
   scoreCandidate(line) {
