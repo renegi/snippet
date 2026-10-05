@@ -19,7 +19,7 @@ Snippet uses OCR (Optical Character Recognition) to detect podcast and episode t
 
 ## Architecture
 
-### Frontend (React)
+### Frontend (React + Vite)
 - **Location**: `client/`
 - **Key Components**:
   - `PodcastScreenshotProcessor`: Main screenshot processing interface
@@ -37,7 +37,7 @@ Snippet uses OCR (Optical Character Recognition) to detect podcast and episode t
 ## Setup
 
 ### Prerequisites
-- Node.js (v18 or higher)
+- Node.js (v20.19 or higher)
 - npm or yarn
 - Google Cloud Vision API credentials
 - Apple Podcasts API access
@@ -82,7 +82,8 @@ Snippet uses OCR (Optical Character Recognition) to detect podcast and episode t
    # Start server (from server directory)
    npm start
    
-   # Start client (from client directory)
+   # Start client (from client directory); Vite serves it on http://localhost:3000
+   # and forwards /api requests to the server on port 3001
    npm start
    ```
 
