@@ -68,7 +68,7 @@ router.post('/', async (req, res) => {
       logger.error('AssemblyAI transcript generation failed:', { error: error.message });
       return res.status(502).json({
         success: false,
-        error: `Transcription failed for "${podcastInfo.validatedEpisode?.title || 'this episode'}"`
+        error: `Transcription failed for "${podcastInfo.validatedEpisode?.title || 'this episode'}": ${error.message}`
       });
     }
 
