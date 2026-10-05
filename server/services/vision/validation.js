@@ -51,6 +51,19 @@ function suggestEpisodes(matches, preferredPodcastId) {
     }));
 }
 
+// The release date of the oldest episode we could see for a podcast (ISO string, or null).
+// Apple lists at most 200 episodes and many feeds keep fewer, so anything older can't be
+// identified; the picker tells the user where that line is.
+function oldestEpisodeDate(matches, podcastId) {
+  let oldest = null;
+  for (const m of matches) {
+    if (m.podcast.collectionId !== podcastId) continue;
+    const time = Date.parse(m.episode.releaseDate);
+    if (!Number.isNaN(time) && (oldest == null || time < oldest)) oldest = time;
+  }
+  return oldest == null ? null : new Date(oldest).toISOString();
+}
+
 module.exports = {
   async validateCandidates(candidates, playback = {}, catalog) {
     const result = await resolve(candidates, playback, catalog);
@@ -91,6 +104,7 @@ module.exports = {
           // A guess between near-equal episodes: the client asks the user to pick
           needsConfirmation: ambiguous,
           suggestions: ambiguous ? suggestEpisodes(result.matches) : [],
+          oldestEpisodeDate: oldestEpisodeDate(result.matches, match.podcast.collectionId),
           // Other likely episodes, e.g. for letting the user pick when `ambiguous`
           alternatives: result.matches
             .filter(m => m !== match && m.total >= match.total - 0.2)
@@ -123,6 +137,7 @@ module.exports = {
           validatedEpisode: null,
           needsConfirmation: suggestions.length > 0,
           suggestions,
+          oldestEpisodeDate: oldestEpisodeDate(result.matches, podcast.collectionId),
           ...diagnostics
         }
       };
@@ -141,6 +156,7 @@ module.exports = {
         method: result.method,
         needsConfirmation: suggestions.length > 0,
         suggestions,
+        oldestEpisodeDate: likeliest ? oldestEpisodeDate(result.matches, likeliest.podcast.collectionId) : null,
         ...diagnostics
       }
     };

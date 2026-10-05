@@ -308,9 +308,13 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           });
         }
         
-        const finalEpisodeTitle = dataItem.episodeTitle ||
+        // The podcast alone, or nothing, was found: the user has to choose the episode
+        const episodeMissing = !hasError && hasAnyData && !dataItem.validation.validatedEpisode;
+
+        const finalEpisodeTitle = episodeMissing ? "Episode couldn't be identified" : (
+                                 dataItem.episodeTitle ||
                                  dataItem.validation?.validatedEpisode?.title || 
-                                 (hasError ? 'Extraction failed' : `Episode ${index + 1}`);
+                                 (hasError ? 'Extraction failed' : `Episode ${index + 1}`));
         
         const finalTimestamp = dataItem.timestamp ||
                               '0:00';
@@ -327,7 +331,8 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           episodeTitle: finalEpisodeTitle,
           timestamp: finalTimestamp,
           podcastArtwork: finalArtwork,
-          needsEpisodeChoice: needsEpisodeChoice(dataItem),
+          needsEpisodeChoice: episodeMissing || needsEpisodeChoice(dataItem),
+          episodeMissing,
           hasError: hasError || !hasAnyData
         };
       })() : {

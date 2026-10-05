@@ -31,6 +31,7 @@ const EpisodePickerModal = ({
 
   const suggestions = screenshotData?.validation?.suggestions || [];
   const currentEpisode = screenshotData?.validation?.validatedEpisode;
+  const oldestDate = formatDate(screenshotData?.validation?.oldestEpisodeDate);
 
   // Start on the app's own guess when it made one; otherwise nothing is selected
   useEffect(() => {
@@ -143,6 +144,13 @@ const EpisodePickerModal = ({
                 );
               })}
             </div>
+
+            {/* Why the right episode might be missing */}
+            <p className="text-xs text-gray-500 font-['Termina'] leading-[130%]">
+              {oldestDate
+                ? `Don't see it? We can only find this show's episodes back to ${oldestDate}, so an older one may not be listed.`
+                : "Don't see it? Older episodes may no longer be listed."}
+            </p>
           </div>
 
           {/* Floating Footer */}

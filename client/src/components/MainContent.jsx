@@ -303,13 +303,21 @@ const MainContent = ({
                      }}>
                     {screenshot.podcastInfo?.episodeTitle}
                   </b>
-                  <div className="self-stretch relative text-xs leading-[130%] font-medium">
-                    {screenshot.podcastInfo?.timestamp}
-                  </div>
-                  {screenshot.podcastInfo?.needsEpisodeChoice && (
-                    <div className="w-[261px] relative text-xs leading-[130%] font-bold text-[#BE3E37]">
-                      Tap to choose the episode
+                  {!screenshot.podcastInfo?.episodeMissing && (
+                    <div className="self-stretch relative text-xs leading-[130%] font-medium">
+                      {screenshot.podcastInfo?.timestamp}
                     </div>
+                  )}
+                  {screenshot.podcastInfo?.needsEpisodeChoice && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onScreenshotClick && onScreenshotClick(index);
+                      }}
+                      className="mt-1 h-8 px-3 rounded-[12px] bg-[#DDDAD1] hover:bg-[#E4E0D2] transition-colors text-xs leading-[130%] text-[#1B1B1B] whitespace-nowrap"
+                    >
+                      <b>Select episode</b>
+                    </button>
                   )}
                 </div>
               </div>
