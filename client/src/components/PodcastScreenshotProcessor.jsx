@@ -112,9 +112,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           requestErrors.push(error.message);
           return {
             error: true,
-            message: `Failed to process ${file.name}: ${error.message}`,
-            firstPass: { error: true },
-            secondPass: { error: true }
+            message: `Failed to process ${file.name}: ${error.message}`
           };
         }
       });
@@ -166,7 +164,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     const failures = [];
     const eligible = podcastInfo.data
       .map((info, index) => ({ info, index }))
-      .filter(({ info }) => info.validation?.validated && (info.timestamp || info.secondPass?.timestamp || info.firstPass?.timestamp));
+      .filter(({ info }) => info.validation?.validated && info.timestamp);
 
     setIsGettingTranscript(true);
     let results;
@@ -193,7 +191,6 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
           episodeTitle: transcriptResult.episode?.title || 
                        info.episodeTitle ||
                        info.validation?.validatedEpisode?.title || 
-                       info.secondPass?.episodeTitle || 
                        `Episode ${index + 1}`,
           timestamp: `${selectedTimeRange.start}s to ${selectedTimeRange.end}s`,
           podcastArtwork: transcriptResult.episode?.artworkUrl || 
@@ -201,7 +198,7 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
                          info.validation?.validatedPodcast?.artworkUrl ||
                          info.validation?.validatedPodcast?.artworkUrl600 ||
                          info.validation?.validatedPodcast?.artworkUrl100,
-          originalTimestamp: info.timestamp || info.secondPass?.timestamp || info.firstPass?.timestamp || '0:00',
+          originalTimestamp: info.timestamp || '0:00',
           selectedRange: selectedTimeRange,
           // Add the missing data for copy functionality
           podcastName: transcriptResult.podcast?.title || 
@@ -241,15 +238,15 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     // More lenient validation - require at least basic episode info
     const hasBasicInfo = (
       info.validation?.validatedPodcast?.id && 
-      (info.episodeTitle || info.validation?.validatedEpisode?.title || info.secondPass?.episodeTitle || info.firstPass?.episodeTitle) &&
-      (info.timestamp || info.secondPass?.timestamp || info.firstPass?.timestamp)
+      (info.episodeTitle || info.validation?.validatedEpisode?.title) &&
+      info.timestamp
     );
 
     if (!hasBasicInfo) {
       console.error(`❌ Missing required information for transcript (episode ${index}):`, {
         podcastId: info.validation?.validatedPodcast?.id,
-        episodeTitle: info.episodeTitle || info.validation?.validatedEpisode?.title || info.secondPass?.episodeTitle || info.firstPass?.episodeTitle,
-        timestamp: info.timestamp || info.secondPass?.timestamp || info.firstPass?.timestamp
+        episodeTitle: info.episodeTitle || info.validation?.validatedEpisode?.title,
+        timestamp: info.timestamp
       });
       return null;
     }
@@ -284,28 +281,22 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
       podcastInfo: hasData ? (() => {
         const dataItem = podcastInfo.data[index];
         const hasError = !!dataItem.error;
-        const hasAnyData = !!(dataItem.firstPass || dataItem.secondPass || dataItem.validation);
+        const hasAnyData = !!dataItem.validation;
         
         // Check if extraction completely failed
         if (hasError || !hasAnyData) {
           console.warn(`⚠️ Screenshot ${index} extraction failed:`, {
             error: dataItem.error,
             message: dataItem.message,
-            hasFirstPass: !!dataItem.firstPass,
-            hasSecondPass: !!dataItem.secondPass,
             hasValidation: !!dataItem.validation
           });
         }
         
         const finalEpisodeTitle = dataItem.episodeTitle ||
                                  dataItem.validation?.validatedEpisode?.title || 
-                                 dataItem.secondPass?.episodeTitle || 
-                                 dataItem.firstPass?.episodeTitle ||
                                  (hasError ? 'Extraction failed' : `Episode ${index + 1}`);
         
         const finalTimestamp = dataItem.timestamp ||
-                              dataItem.secondPass?.timestamp || 
-                              dataItem.firstPass?.timestamp ||
                               '0:00';
         
         const finalArtwork = dataItem.validation?.validatedPodcast?.artworkUrl || 
@@ -336,52 +327,30 @@ function PodcastScreenshotProcessor({ fileInputRef, initialFiles = [] }) {
     setIsEditModalOpen(true);
   };
 
+  // Applies edits from the modal to the selected screenshot's data (without mutating state)
   const handleModalUpdate = (updatedData) => {
-    
-    // Update the podcast info with the new data
-    if (selectedScreenshotIndex !== null && podcastInfo?.data) {
-      const updatedPodcastInfo = { ...podcastInfo };
-      const screenshotData = updatedPodcastInfo.data[selectedScreenshotIndex];
-      
-      
-      // Update the validation data
+    if (selectedScreenshotIndex === null || !podcastInfo?.data) return;
+
+    const applyEdits = (item) => {
+      const updated = { ...item, validation: { ...item.validation } };
       if (updatedData.podcast) {
-        screenshotData.validation = {
-          ...screenshotData.validation,
-          validatedPodcast: updatedData.podcast
-        };
-        screenshotData.secondPass = {
-          ...screenshotData.secondPass,
-          podcastTitle: updatedData.podcast.title
-        };
-        // Also update root level for UI consistency
-        screenshotData.podcastTitle = updatedData.podcast.title;
+        updated.validation.validatedPodcast = updatedData.podcast;
+        updated.podcastTitle = updatedData.podcast.title;
       }
-      
       if (updatedData.episode) {
-        screenshotData.validation = {
-          ...screenshotData.validation,
-          validatedEpisode: updatedData.episode
-        };
-        screenshotData.secondPass = {
-          ...screenshotData.secondPass,
-          episodeTitle: updatedData.episode.title
-        };
-        // Also update root level for UI consistency
-        screenshotData.episodeTitle = updatedData.episode.title;
+        updated.validation.validatedEpisode = updatedData.episode;
+        updated.episodeTitle = updatedData.episode.title;
       }
-      
       if (updatedData.timestamp) {
-        screenshotData.secondPass = {
-          ...screenshotData.secondPass,
-          timestamp: updatedData.timestamp
-        };
-        // Also update root level for UI consistency
-        screenshotData.timestamp = updatedData.timestamp;
+        updated.timestamp = updatedData.timestamp;
       }
-      
-      setPodcastInfo(updatedPodcastInfo);
-    }
+      return updated;
+    };
+
+    setPodcastInfo(prev => ({
+      ...prev,
+      data: prev.data.map((item, index) => (index === selectedScreenshotIndex ? applyEdits(item) : item))
+    }));
   };
 
   const handleModalDelete = () => {

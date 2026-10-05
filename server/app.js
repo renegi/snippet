@@ -6,11 +6,11 @@ const extractRouter = require('./api/extractRouter');
 const transcriptRouter = require('./api/transcriptRouter');
 const searchRouter = require('./api/searchRouter');
 
-// The Express app shared by the long-running server (server.js) and the
+// The Express app shared by the local dev server (server.js) and the
 // Vercel serverless function (api/index.js at the repo root).
 const app = express();
 
-// Render and Vercel sit behind a proxy; trust it so req.ip is the real client
+// Vercel sits behind a proxy; trust it so req.ip is the real client
 app.set('trust proxy', 1);
 
 // In production the client is served from the same origin, so CORS is only
